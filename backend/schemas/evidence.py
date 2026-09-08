@@ -1,6 +1,6 @@
 """Evidence schemas and multimodal source classifications."""
 from typing import Any, Dict, List, Optional
-from pydantic import BaseModel, Field
+from backend.schemas.base import BaseModel, Field
 
 class Evidence(BaseModel):
     id: str

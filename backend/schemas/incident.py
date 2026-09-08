@@ -1,6 +1,6 @@
 """Incident and Timeline Event schemas."""
 from typing import Any, Dict, Optional
-from pydantic import BaseModel, Field
+from backend.schemas.base import BaseModel, Field
 
 class Incident(BaseModel):
     id: str

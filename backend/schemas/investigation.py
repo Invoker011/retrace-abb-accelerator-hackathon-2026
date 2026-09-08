@@ -1,6 +1,6 @@
 """Investigation request and response schemas."""
 from typing import Any, Dict, List, Optional
-from pydantic import BaseModel, Field
+from backend.schemas.base import BaseModel, Field
 from backend.schemas.finding import Finding, FindingClassification
 
 class InvestigationQueryRequest(BaseModel):

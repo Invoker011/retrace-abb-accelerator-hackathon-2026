@@ -1,6 +1,6 @@
 """Schemas for uploaded industrial evidence artifacts."""
 from typing import Any, Dict, Optional
-from pydantic import BaseModel, Field
+from backend.schemas.base import BaseModel, Field
 
 class UploadedEvidence(BaseModel):
     evidence_id: str = Field(..., alias="evidenceId")

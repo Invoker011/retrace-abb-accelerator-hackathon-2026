@@ -1,7 +1,7 @@
 """Finding schemas and classification definitions."""
 from enum import Enum
 from typing import List, Optional
-from pydantic import BaseModel, Field
+from backend.schemas.base import BaseModel, Field
 
 class FindingClassification(str, Enum):
     OBSERVED = "OBSERVED"

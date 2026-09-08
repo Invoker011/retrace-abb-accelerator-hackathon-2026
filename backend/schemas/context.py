@@ -1,6 +1,6 @@
 """Combined Incident Context schema."""
 from typing import List
-from pydantic import BaseModel
+from backend.schemas.base import BaseModel
 from backend.schemas.incident import Incident, IncidentEvent
 from backend.schemas.asset import Asset, AssetRelationship
 from backend.schemas.evidence import Evidence

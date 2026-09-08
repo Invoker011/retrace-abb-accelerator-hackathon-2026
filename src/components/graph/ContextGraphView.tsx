@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Incident,
   Asset,
@@ -7,6 +7,7 @@ import {
 } from '../../types';
 import { FindingBadge } from '../common/FindingBadge';
 import { EvidenceBadge } from '../common/EvidenceBadge';
+import { graphService, GraphResponseData } from '../../services/graphService';
 import {
   Network,
   Cpu,
@@ -57,9 +58,14 @@ export const ContextGraphView: React.FC<ContextGraphViewProps> = ({
 }) => {
   const [selectedNodeId, setSelectedNodeId] = useState<string>('P-204');
   const [filterType, setFilterType] = useState<'all' | 'assets' | 'evidence'>('all');
+  const [graphSource, setGraphSource] = useState<'LIVE' | 'MOCK'>('MOCK');
+  const [activeGraphData, setActiveGraphData] = useState<{
+    nodes: GraphNode[];
+    links: GraphLink[];
+  } | null>(null);
 
-  // Define layout coordinates for SVG canvas (1000 x 600)
-  const nodes: GraphNode[] = [
+  // Define fallback layout coordinates for SVG canvas (1000 x 600)
+  const defaultNodes: GraphNode[] = [
     // Central Incident Node
     {
       id: incident.id,
@@ -175,8 +181,8 @@ export const ContextGraphView: React.FC<ContextGraphViewProps> = ({
     },
   ];
 
-  // Semantic Edges
-  const links: GraphLink[] = [
+  // Semantic Edges fallback
+  const defaultLinks: GraphLink[] = [
     // Incident connects to assets
     { id: 'L1', source: incident.id, target: 'VFD-204', label: 'originates at', type: 'incident_asset' },
     { id: 'L2', source: incident.id, target: 'M-204', label: 'involves', type: 'incident_asset' },
@@ -196,6 +202,104 @@ export const ContextGraphView: React.FC<ContextGraphViewProps> = ({
     { id: 'L12', source: 'EVD-006', target: 'P-204', label: 'witness note', type: 'evidence_asset' },
     { id: 'L13', source: 'EVD-002', target: 'PLC-204', label: 'trip sequence', type: 'evidence_asset' },
   ];
+
+  // Fetch live incident context graph from backend endpoint
+  useEffect(() => {
+    let isMounted = true;
+
+    async function loadGraph() {
+      try {
+        const res = await graphService.getIncidentGraph(incident.id);
+        if (!isMounted) return;
+
+        if (res && Array.isArray(res.nodes) && res.nodes.length > 0) {
+          const mappedNodes: GraphNode[] = res.nodes.map((node, index) => {
+            const defaultMatch = defaultNodes.find((dn) => dn.id === node.id);
+            if (defaultMatch) {
+              return {
+                ...defaultMatch,
+                name: node.label || defaultMatch.name,
+              };
+            }
+
+            const angle = (index / res.nodes.length) * 2 * Math.PI;
+            const cx = 500;
+            const cy = 280;
+            const rx = 370;
+            const ry = 210;
+            const nx = Math.round(cx + rx * Math.cos(angle));
+            const ny = Math.round(cy + ry * Math.sin(angle));
+
+            const isAsset = node.type?.toLowerCase() === 'asset';
+            const isEvidence = node.type?.toLowerCase() === 'evidence';
+
+            const nodeType: 'incident' | 'asset' | 'evidence' = isAsset
+              ? 'asset'
+              : isEvidence
+              ? 'evidence'
+              : 'incident';
+
+            const matchingAsset = assets.find((a) => a.id === node.id);
+            const matchingEvidence = evidenceList.find((e) => e.id === node.id);
+
+            return {
+              id: node.id,
+              name: node.label || node.id,
+              type: nodeType,
+              x: Math.max(90, Math.min(910, nx)),
+              y: Math.max(90, Math.min(510, ny)),
+              data: matchingAsset || matchingEvidence || node.metadata || {},
+              color: isAsset ? '#1e1b4b' : isEvidence ? '#082f49' : '#0f172a',
+              borderColor: isAsset ? '#818cf8' : isEvidence ? '#38bdf8' : '#38bdf8',
+            };
+          });
+
+          const mappedLinks: GraphLink[] = (res.edges || []).map((edge, idx) => {
+            const sNode = res.nodes.find((n) => n.id === edge.source);
+            const tNode = res.nodes.find((n) => n.id === edge.target);
+
+            const isAssetLink =
+              sNode?.type?.toLowerCase() === 'asset' &&
+              tNode?.type?.toLowerCase() === 'asset';
+            const isIncidentLink =
+              sNode?.type?.toLowerCase() === 'incident' ||
+              tNode?.type?.toLowerCase() === 'incident';
+
+            return {
+              id: edge.id || `L-live-${idx}`,
+              source: edge.source,
+              target: edge.target,
+              label: (edge.relationship || 'rel').toLowerCase().replace(/_/g, ' '),
+              type: isAssetLink
+                ? 'asset_asset'
+                : isIncidentLink
+                ? 'incident_asset'
+                : 'evidence_asset',
+            };
+          });
+
+          setActiveGraphData({ nodes: mappedNodes, links: mappedLinks });
+          setGraphSource(res.source === 'neo4j' ? 'LIVE' : 'MOCK');
+        } else {
+          setGraphSource('MOCK');
+          setActiveGraphData(null);
+        }
+      } catch {
+        if (isMounted) {
+          setGraphSource('MOCK');
+          setActiveGraphData(null);
+        }
+      }
+    }
+
+    loadGraph();
+    return () => {
+      isMounted = false;
+    };
+  }, [incident.id]);
+
+  const nodes = activeGraphData?.nodes || defaultNodes;
+  const links = activeGraphData?.links || defaultLinks;
 
   // Selected node object
   const activeNode = nodes.find((n) => n.id === selectedNodeId) || nodes[0];
@@ -234,8 +338,26 @@ export const ContextGraphView: React.FC<ContextGraphViewProps> = ({
           </p>
         </div>
 
-        {/* Filter Buttons */}
-        <div className="flex items-center gap-1.5 p-1 rounded-lg bg-slate-900 border border-slate-800 font-mono text-xs">
+        {/* Graph Status Indicator & Filter Buttons */}
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg bg-slate-900 border border-slate-800 font-mono text-xs">
+            <span
+              className={`w-2 h-2 rounded-full ${
+                graphSource === 'LIVE' ? 'bg-emerald-400 animate-pulse' : 'bg-amber-400'
+              }`}
+            />
+            <span className="text-slate-400 text-[11px]">GRAPH:</span>
+            <span
+              className={`font-bold text-[11px] tracking-wider ${
+                graphSource === 'LIVE' ? 'text-emerald-400' : 'text-amber-400'
+              }`}
+            >
+              {graphSource}
+            </span>
+          </div>
+
+          {/* Filter Buttons */}
+          <div className="flex items-center gap-1.5 p-1 rounded-lg bg-slate-900 border border-slate-800 font-mono text-xs">
           <button
             onClick={() => setFilterType('all')}
             className={`px-3 py-1 rounded transition-colors ${
@@ -266,6 +388,7 @@ export const ContextGraphView: React.FC<ContextGraphViewProps> = ({
           >
             Evidence Only
           </button>
+        </div>
         </div>
       </div>
 

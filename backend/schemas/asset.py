@@ -1,6 +1,6 @@
 """Asset and topology relationship schemas."""
 from typing import Dict, Optional
-from pydantic import BaseModel, Field
+from backend.schemas.base import BaseModel, Field
 
 class Asset(BaseModel):
     id: str

@@ -43,4 +43,10 @@ class Settings:
     # PostgreSQL Database URL (read only from server-side environment)
     DATABASE_URL: Optional[str] = os.getenv("DATABASE_URL")
 
+    # Neo4j Graph Database (Server-side only, never exposed to client)
+    NEO4J_URI: Optional[str] = os.getenv("NEO4J_URI")
+    NEO4J_USERNAME: Optional[str] = os.getenv("NEO4J_USERNAME")
+    NEO4J_PASSWORD: Optional[str] = os.getenv("NEO4J_PASSWORD")
+    NEO4J_DATABASE: str = os.getenv("NEO4J_DATABASE", "neo4j")
+
 settings = Settings()

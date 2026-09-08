@@ -10,6 +10,8 @@ from backend.schemas.evidence import Evidence
 from backend.schemas.upload import UploadedEvidence
 from backend.schemas.prevention import PreventionScenario
 from backend.schemas.context import IncidentContextResponse
+from backend.graph.models import GraphResponse, GraphSyncResponse, AssetPathResponse
+from backend.services.context_graph_service import context_graph_service, ContextGraphError
 
 router = APIRouter(prefix="/incidents", tags=["Incidents"])
 
@@ -157,4 +159,66 @@ def list_incident_uploads(incident_id: str) -> List[UploadedEvidence]:
             detail=f"Incident '{incident_id}' not found.",
         )
     return ingestion_service.get_uploads_for_incident(incident_id)
+
+
+@router.post(
+    "/{incident_id}/graph/sync",
+    response_model=GraphSyncResponse,
+    summary="Synchronize incident evidence, events, and assets into Incident Context Graph",
+)
+def sync_incident_graph(incident_id: str) -> GraphSyncResponse:
+    try:
+        res = context_graph_service.sync_incident_context(incident_id)
+        return GraphSyncResponse(**res)
+    except ContextGraphError as e:
+        raise HTTPException(status_code=e.status_code, detail=e.message)
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to synchronize incident context graph.",
+        )
+
+
+@router.get(
+    "/{incident_id}/graph",
+    response_model=GraphResponse,
+    summary="Retrieve the persistent Incident Context Graph (nodes and relationships)",
+)
+def get_incident_graph(incident_id: str) -> GraphResponse:
+    try:
+        res = context_graph_service.get_incident_graph(incident_id)
+        return GraphResponse(**res)
+    except ContextGraphError as e:
+        raise HTTPException(status_code=e.status_code, detail=e.message)
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to fetch incident context graph.",
+        )
+
+
+@router.get(
+    "/{incident_id}/graph/paths",
+    response_model=AssetPathResponse,
+    summary="Find relationship path between two assets in the Context Graph",
+)
+def get_incident_graph_path(
+    incident_id: str,
+    source_asset: str,
+    target_asset: str,
+) -> AssetPathResponse:
+    try:
+        res = context_graph_service.find_asset_path(
+            incident_id=incident_id,
+            source_asset=source_asset,
+            target_asset=target_asset,
+        )
+        return AssetPathResponse(**res)
+    except ContextGraphError as e:
+        raise HTTPException(status_code=e.status_code, detail=e.message)
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to discover asset relationship path.",
+        )
 
