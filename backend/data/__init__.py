@@ -1,0 +1,20 @@
+"""Data module for RETRACE backend."""
+from backend.data.mock_data import (
+    MOCK_INCIDENTS,
+    MOCK_ASSETS,
+    MOCK_ASSET_RELATIONSHIPS,
+    MOCK_TIMELINE_EVENTS,
+    MOCK_EVIDENCE,
+    MOCK_FINDINGS,
+    MOCK_PREVENTION_SCENARIO,
+)
+
+__all__ = [
+    "MOCK_INCIDENTS",
+    "MOCK_ASSETS",
+    "MOCK_ASSET_RELATIONSHIPS",
+    "MOCK_TIMELINE_EVENTS",
+    "MOCK_EVIDENCE",
+    "MOCK_FINDINGS",
+    "MOCK_PREVENTION_SCENARIO",
+]
