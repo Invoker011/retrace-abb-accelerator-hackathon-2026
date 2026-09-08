@@ -2,6 +2,31 @@
 import os
 from typing import List
 
+DEFAULT_CORS_ORIGINS: List[str] = [
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+    "http://localhost:8000",
+    "http://127.0.0.1:8000",
+]
+
+def parse_cors_origins() -> List[str]:
+    """Parse CORS origins from CORS_ORIGINS environment variable.
+    Splits comma-separated origins, trims whitespace/quotes, and filters empty entries.
+    Falls back to safe localhost development defaults if unset or empty.
+    """
+    raw_origins = os.getenv("CORS_ORIGINS", "").strip()
+    if raw_origins:
+        parsed = [
+            origin.strip().strip("'\"")
+            for origin in raw_origins.split(",")
+            if origin.strip().strip("'\"")
+        ]
+        if parsed:
+            return parsed
+    return DEFAULT_CORS_ORIGINS
+
 class Settings:
     PROJECT_NAME: str = "RETRACE Multimodal Industrial Maintenance Intelligence API"
     VERSION: str = "1.0.0"
@@ -13,28 +38,6 @@ class Settings:
     HOST: str = os.getenv("HOST", "0.0.0.0")
 
     # CORS Configuration
-    # Safe localhost development defaults - configurable via CORS_ORIGINS env variable
-    DEFAULT_CORS_ORIGINS: List[str] = [
-        "http://localhost:3000",
-        "http://127.0.0.1:3000",
-        "http://localhost:5173",
-        "http://127.0.0.1:5173",
-        "http://localhost:8000",
-        "http://127.0.0.1:8000",
-    ]
-
-    @classmethod
-    def get_cors_origins(cls) -> List[str]:
-        raw_origins = os.getenv("CORS_ORIGINS", "").strip()
-        if raw_origins:
-            parsed = [
-                origin.strip().strip("'\"")
-                for origin in raw_origins.split(",")
-                if origin.strip().strip("'\"")
-            ]
-            return parsed if parsed else cls.DEFAULT_CORS_ORIGINS
-        return cls.DEFAULT_CORS_ORIGINS
-
-    CORS_ORIGINS: List[str] = get_cors_origins()
+    CORS_ORIGINS: List[str] = parse_cors_origins()
 
 settings = Settings()
