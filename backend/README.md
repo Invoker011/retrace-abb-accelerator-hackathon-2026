@@ -12,24 +12,73 @@ RETRACE reconstructs industrial incidents from fragmented operational, engineeri
 
 ```
 backend/
+├── alembic/                  # Database schema migrations
+│   ├── env.py                # Dynamic DATABASE_URL configuration
+│   ├── script.py.mako        # Migration template
+│   └── versions/             # Migration scripts
+│       └── 001_create_uploaded_evidence_table.py
+├── alembic.ini               # Alembic configuration file
 ├── app/
-│   ├── main.py               # FastAPI application entry point and middleware configuration
-│   ├── api/                  # API routers (incidents, evidence, investigation)
-│   ├── core/                 # Environment and application settings
-│   ├── data/                 # Synthetic incident dataset (INC-2026-001)
-│   ├── models/               # Domain model definitions
-│   ├── schemas/              # Pydantic validation schemas
-│   └── services/             # Deterministic intelligence and incident services
-├── tests/
-│   ├── __init__.py
-│   └── test_api.py           # Endpoint integration and validation tests
-├── Dockerfile                # Container definition for Google Cloud Run
-├── .dockerignore             # Docker build context exclusions
-├── CLOUD_RUN_DEPLOY.md       # Google Cloud Run deployment guide and gcloud commands
-├── requirements.txt          # Python dependencies
+│   ├── main.py               # FastAPI application entry point and health checks
+├── database/                 # Relational database layer
+│   ├── models.py             # SQLAlchemy 2.0 models (UploadedEvidenceModel)
+│   └── session.py            # Engine, sessionmaker, and connectivity checks
+├── repositories/             # Repository pattern layer
+│   └── uploaded_evidence_repository.py  # PostgreSQL & fallback repositories
+├── services/                 # Industrial intelligence & ingestion services
+│   ├── evidence_storage.py   # Immutable raw file storage (GCS & Local)
+│   ├── upload_service.py     # Upload orchestration & consistency rollback
+│   └── evidence_extractor.py # Deterministic non-AI metadata extraction
+├── schemas/                  # Pydantic schemas (UploadedEvidence, Incident)
+├── tests/                    # Unit and integration test suite
+├── requirements.txt          # Python dependencies (FastAPI, SQLAlchemy, Alembic, psycopg)
 ├── .env.example              # Environment variable documentation
 └── README.md
 ```
+
+---
+
+## Industrial Evidence Storage & Persistence Architecture
+
+RETRACE separates raw file storage from metadata indexing using a dual-layer architecture:
+
+1. **Immutable Raw Evidence Storage (Google Cloud Storage / Local Filesystem)**:
+   - Binary evidence payloads (CSV logs, PDFs, images, text records) are stored immutably.
+   - Identified by server-generated unique IDs: `EVD-UPL-{UUID}_{safe_filename}`.
+   - Configured via `GCS_BUCKET_NAME`.
+
+2. **Durable Evidence Metadata & Provenance (PostgreSQL via SQLAlchemy 2.x)**:
+   - Persists evidence provenance records in the `uploaded_evidence` table:
+     - `evidence_id`, `incident_id`, `source_type`, `original_filename`, `stored_filename`, `content_type`, `file_size`, `asset_id`, `description`, `storage_uri`, `uploaded_at`, `processing_status`, `sha256_hash`, `metadata`.
+   - Indexed on `incident_id`, `asset_id`, `source_type`, `processing_status`, `sha256_hash`, and `uploaded_at`.
+   - Managed with Alembic migrations.
+
+3. **Consistency & Orphan Cleanup**:
+   - If raw file storage succeeds but database metadata insertion fails, RETRACE automatically attempts deletion of the newly stored object so orphaned files are not left behind.
+   - Database operations are encapsulated behind `UploadedEvidenceRepositoryInterface`.
+
+4. **Environment Fallback Behavior**:
+   - **Development Mode (`ENVIRONMENT=development`)**:
+     If `DATABASE_URL` is unset, backend falls back to an in-memory repository for local development and logs:
+     `[RETRACE] PostgreSQL not configured - using development in-memory metadata repository`.
+   - **Production Mode (`ENVIRONMENT=production`)**:
+     If `DATABASE_URL` is unset, RETRACE enforces durable storage and rejects uploads with an explicit 500 configuration error rather than silently pretending evidence was saved. Non-upload endpoints continue working normally.
+
+---
+
+## Database Migrations (Alembic)
+
+Run migrations to create or update the PostgreSQL database schema:
+
+```bash
+# Apply all pending migrations
+alembic upgrade head
+
+# Rollback latest migration
+alembic downgrade -1
+```
+
+`alembic/env.py` dynamically sources `DATABASE_URL` from server environment variables; connection strings and credentials are never stored in `alembic.ini`.
 
 ---
 

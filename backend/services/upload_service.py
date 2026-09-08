@@ -3,6 +3,7 @@ import os
 import re
 import uuid
 import hashlib
+import logging
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -11,6 +12,12 @@ from backend.schemas.upload import UploadedEvidence
 from backend.services.evidence_storage import evidence_storage
 from backend.services.evidence_extractor import extract_evidence_metadata
 from backend.services.incident_service import incident_service
+from backend.repositories.uploaded_evidence_repository import (
+    UploadedEvidenceRepositoryInterface,
+    get_uploaded_evidence_repository,
+)
+
+logger = logging.getLogger("retrace.ingestion")
 
 MAX_FILE_SIZE_BYTES = 20 * 1024 * 1024  # 20 MB
 
@@ -65,9 +72,22 @@ class IngestionError(Exception):
         self.status_code = status_code
 
 class IngestionService:
-    def __init__(self):
-        # In-memory registry for uploaded evidence records
-        self._uploads: Dict[str, UploadedEvidence] = {}
+    def __init__(self, repo: Optional[UploadedEvidenceRepositoryInterface] = None):
+        self._custom_repo = repo
+
+    @property
+    def repo(self) -> UploadedEvidenceRepositoryInterface:
+        if self._custom_repo is not None:
+            return self._custom_repo
+        return get_uploaded_evidence_repository()
+
+    @property
+    def _uploads(self) -> Dict[str, UploadedEvidence]:
+        """Backward compatibility helper for tests inspecting internal dictionary."""
+        current_repo = self.repo
+        if hasattr(current_repo, "_records"):
+            return getattr(current_repo, "_records")
+        return {}
 
     def normalize_source_type(self, raw_source_type: str) -> str:
         """Validates and normalizes source type to canonical code."""
@@ -216,39 +236,71 @@ class IngestionService:
             metadata=extracted_meta,
         )
 
-        self._uploads[evidence_id] = uploaded_record
-        return uploaded_record
+        # 10. Persist metadata to database via repository
+        try:
+            saved_record = self.repo.create(uploaded_record)
+            return saved_record
+        except Exception as db_err:
+            # Consistency recovery: Attempt to delete the newly created raw storage object
+            # so RETRACE does not intentionally leave orphaned evidence files
+            try:
+                evidence_storage.delete_file(
+                    incident_id=incident_id,
+                    evidence_id=evidence_id,
+                    filename=stored_filename,
+                )
+            except Exception as cleanup_err:
+                logger.warning(
+                    "[RETRACE] Failed to cleanup raw evidence file during database failure: %s",
+                    type(cleanup_err).__name__,
+                )
+            # Log failure safely without exposing credentials or internal connection strings
+            logger.error(
+                "[RETRACE] Failed to persist uploaded evidence metadata to database: %s",
+                type(db_err).__name__,
+            )
+            if isinstance(db_err, IngestionError):
+                raise db_err
+            raise IngestionError(
+                "Failed to durably register evidence metadata in database.",
+                status_code=500,
+            )
 
     def get_uploads_for_incident(self, incident_id: str) -> List[UploadedEvidence]:
-        """Returns all uploaded evidence items for a given incident."""
-        return [
-            rec for rec in self._uploads.values()
-            if rec.incident_id.upper() == incident_id.upper()
-        ]
+        """Returns all uploaded evidence items for a given incident from repository."""
+        return self.repo.get_by_incident(incident_id)
 
     def get_upload_by_id(self, evidence_id: str) -> Optional[UploadedEvidence]:
-        """Retrieves a single uploaded evidence item by ID."""
-        for eid, rec in self._uploads.items():
-            if eid.upper() == evidence_id.upper():
-                return rec
-        return None
+        """Retrieves a single uploaded evidence item by ID from repository."""
+        return self.repo.get_by_id(evidence_id)
 
     def delete_upload(self, evidence_id: str) -> bool:
-        """Deletes an uploaded prototype evidence record and its underlying raw storage object."""
+        """Deletes an uploaded evidence record and its underlying raw storage object.
+        1. Retrieve metadata from repository.
+        2. Determine the storage object from server-side stored metadata.
+        3. Delete the raw object through EvidenceStorageService.
+        4. Delete the metadata record from repository.
+        """
         record = self.get_upload_by_id(evidence_id)
         if not record:
             return False
 
-        # Remove raw file from storage
-        evidence_storage.delete_file(
-            incident_id=record.incident_id,
-            evidence_id=record.evidence_id,
-            filename=record.stored_filename,
-        )
+        # Remove raw file from storage (safe handling if already missing)
+        try:
+            evidence_storage.delete_file(
+                incident_id=record.incident_id,
+                evidence_id=record.evidence_id,
+                filename=record.stored_filename,
+            )
+        except Exception as storage_err:
+            logger.warning(
+                "[RETRACE] Storage delete warning for %s: %s",
+                record.stored_filename,
+                type(storage_err).__name__,
+            )
 
-        # Remove from registry
-        if record.evidence_id in self._uploads:
-            del self._uploads[record.evidence_id]
-        return True
+        # Delete metadata record from repository
+        deleted = self.repo.delete(record.evidence_id)
+        return deleted
 
 ingestion_service = IngestionService()

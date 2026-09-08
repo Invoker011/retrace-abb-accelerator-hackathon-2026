@@ -1,6 +1,6 @@
 """Core configuration for RETRACE backend application."""
 import os
-from typing import List
+from typing import List, Optional
 
 DEFAULT_CORS_ORIGINS: List[str] = [
     "http://localhost:3000",
@@ -39,5 +39,8 @@ class Settings:
 
     # CORS Configuration
     CORS_ORIGINS: List[str] = parse_cors_origins()
+
+    # PostgreSQL Database URL (read only from server-side environment)
+    DATABASE_URL: Optional[str] = os.getenv("DATABASE_URL")
 
 settings = Settings()

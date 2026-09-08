@@ -53,8 +53,12 @@ export const EvidenceView: React.FC<EvidenceViewProps> = ({
 
   const handleDeleteUploadedItem = async (evidenceId: string) => {
     if (window.confirm(`Are you sure you want to remove uploaded evidence ${evidenceId}?`)) {
-      await evidenceService.deleteUploadedEvidence(evidenceId);
-      setUploadedItems((prev) => prev.filter((i) => i.evidenceId !== evidenceId));
+      try {
+        await evidenceService.deleteUploadedEvidence(evidenceId);
+        setUploadedItems((prev) => prev.filter((i) => i.evidenceId !== evidenceId));
+      } catch (err) {
+        console.error('Failed to delete uploaded evidence:', err);
+      }
     }
   };
 

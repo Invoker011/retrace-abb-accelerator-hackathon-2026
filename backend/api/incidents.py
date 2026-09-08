@@ -138,9 +138,10 @@ async def upload_incident_evidence(
     except IngestionError as e:
         raise HTTPException(status_code=e.status_code, detail=e.message)
     except Exception as e:
+        # Do not leak database credentials, stack traces, or connection strings
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to process and store evidence: {str(e)}",
+            detail="Failed to process and store evidence in RETRACE intelligence service.",
         )
 
 @router.get(

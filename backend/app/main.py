@@ -19,6 +19,7 @@ from fastapi.responses import JSONResponse
 
 from backend.core.config import settings
 from backend.api import api_router
+from backend.database.session import check_database_health
 
 app = FastAPI(
     title=settings.PROJECT_NAME,
@@ -57,12 +58,22 @@ def root():
         "docs": "/docs",
     }
 
-# Health Check Endpoint
+# Health Check Endpoints
 @app.get("/health", tags=["Health"])
 def health_check():
+    db_status = check_database_health()
     return {
         "status": "healthy",
         "service": "RETRACE API",
+        "database": db_status,
+    }
+
+@app.get("/health/database", tags=["Health"])
+def database_health_check():
+    db_status = check_database_health()
+    return {
+        "service": "RETRACE Database Subsystem",
+        "database": db_status,
     }
 
 # Mount the modular API router under /api

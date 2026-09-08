@@ -2,8 +2,6 @@ import { mockEvidence } from '../data/mockData';
 import { Evidence, EvidenceCategory, UploadedEvidenceItem } from '../types';
 import { apiClient } from './apiClient';
 
-let localUploadedItems: UploadedEvidenceItem[] = [];
-
 const mapEvidence = (data: any): Evidence => ({
   id: data.id,
   filename: data.filename,
@@ -94,7 +92,8 @@ export const evidenceService = {
   },
 
   /**
-   * Upload industrial evidence file attached to an incident
+   * Upload industrial evidence file attached to an incident.
+   * Persists metadata to backend database and raw bytes to immutable storage.
    */
   async uploadEvidence(
     incidentId: string,
@@ -109,64 +108,31 @@ export const evidenceService = {
     if (assetId) formData.append('asset_id', assetId);
     if (description) formData.append('description', description);
 
-    try {
-      const res = await apiClient.upload<any>(
-        `/api/incidents/${incidentId}/evidence/upload`,
-        formData
-      );
-      const mapped = mapUploadedEvidence(res);
-      localUploadedItems.unshift(mapped);
-      return mapped;
-    } catch (err) {
-      console.warn('[RETRACE] Upload API failed or offline, falling back to local session store:', err);
-      // Fallback client simulation if offline / mock mode
-      const simulated: UploadedEvidenceItem = {
-        evidenceId: `EVD-UPL-${Math.random().toString(36).substring(2, 8).toUpperCase()}`,
-        incidentId,
-        sourceType,
-        originalFilename: file.name,
-        storedFilename: `local_${file.name}`,
-        contentType: file.type || 'application/octet-stream',
-        fileSize: file.size,
-        assetId: assetId || null,
-        description: description || null,
-        storageUri: `file://local/incidents/${incidentId}/evidence/${file.name}`,
-        uploadedAt: new Date().toISOString(),
-        processingStatus: 'UPLOADED',
-        sha256Hash: 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855',
-        metadata: {
-          format: file.name.split('.').pop()?.toLowerCase() || 'unknown',
-          preview: 'File captured in local browser memory store (mock mode).',
-        },
-      };
-      localUploadedItems.unshift(simulated);
-      return simulated;
-    }
+    // Call backend endpoint directly without fake client simulation
+    const res = await apiClient.upload<any>(
+      `/api/incidents/${incidentId}/evidence/upload`,
+      formData
+    );
+    return mapUploadedEvidence(res);
   },
 
   /**
-   * Get all uploaded evidence items for an incident
+   * Get all uploaded evidence items for an incident from backend database
    */
   async getUploadedEvidence(incidentId: string = 'INC-2026-001'): Promise<UploadedEvidenceItem[]> {
     try {
       const data = await apiClient.get<any[]>(`/api/incidents/${incidentId}/evidence/uploads`);
       if (Array.isArray(data)) {
-        const mappedFromApi = data.map(mapUploadedEvidence);
-        // Merge with any in-memory items not yet present
-        const apiIds = new Set(mappedFromApi.map((i) => i.evidenceId));
-        const extraLocal = localUploadedItems.filter(
-          (l) => l.incidentId === incidentId && !apiIds.has(l.evidenceId)
-        );
-        return [...mappedFromApi, ...extraLocal];
+        return data.map(mapUploadedEvidence);
       }
-    } catch {
-      // Return local cache if API failed
+    } catch (err) {
+      console.warn('[RETRACE] Failed to retrieve uploaded evidence from backend:', err);
     }
-    return localUploadedItems.filter((l) => l.incidentId === incidentId);
+    return [];
   },
 
   /**
-   * Get single uploaded evidence item by ID
+   * Get single uploaded evidence item by ID from backend database
    */
   async getUploadedEvidenceById(evidenceId: string): Promise<UploadedEvidenceItem | undefined> {
     try {
@@ -174,23 +140,23 @@ export const evidenceService = {
       if (data && (data.evidenceId || data.evidence_id)) {
         return mapUploadedEvidence(data);
       }
-    } catch {
-      // Fallback to local cache
+    } catch (err) {
+      console.warn(`[RETRACE] Failed to retrieve evidence artifact ${evidenceId}:`, err);
     }
-    return localUploadedItems.find((i) => i.evidenceId === evidenceId);
+    return undefined;
   },
 
   /**
-   * Delete uploaded evidence item
+   * Delete uploaded evidence item and its associated storage from backend
    */
   async deleteUploadedEvidence(evidenceId: string): Promise<boolean> {
     try {
       await apiClient.delete(`/api/evidence/uploads/${evidenceId}`);
-    } catch {
-      // Continue to clean up local cache regardless
+      return true;
+    } catch (err) {
+      console.error(`[RETRACE] Failed to delete evidence artifact ${evidenceId}:`, err);
+      throw err;
     }
-    localUploadedItems = localUploadedItems.filter((i) => i.evidenceId !== evidenceId);
-    return true;
   },
 };
 
