@@ -2,7 +2,7 @@
 import os
 import logging
 from contextlib import contextmanager
-from typing import Generator, Optional
+from typing import Any, Generator, Optional
 
 from backend.core.config import settings
 
