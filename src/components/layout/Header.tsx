@@ -5,15 +5,22 @@ import {
   MapPin,
   Shield,
   Layers,
+  Server,
 } from 'lucide-react';
 import { Incident } from '../../types';
+import { ApiConnectionState } from '../../services/apiClient';
 
 interface HeaderProps {
   currentIncident: Incident;
   onNavigateToView: (view: 'incidents' | 'replay' | 'evidence') => void;
+  apiStatus?: ApiConnectionState;
 }
 
-export const Header: React.FC<HeaderProps> = ({ currentIncident, onNavigateToView }) => {
+export const Header: React.FC<HeaderProps> = ({
+  currentIncident,
+  onNavigateToView,
+  apiStatus = 'connecting',
+}) => {
   return (
     <header
       id="retrace-header"
@@ -42,6 +49,42 @@ export const Header: React.FC<HeaderProps> = ({ currentIncident, onNavigateToVie
 
       {/* Right Telemetry & Status Badges */}
       <div className="flex items-center gap-3">
+        {/* Backend API Connection Indicator */}
+        <div
+          id="api-connection-status"
+          className={`flex items-center gap-1.5 text-xs font-mono px-2.5 py-1.5 rounded-md border transition-colors ${
+            apiStatus === 'live'
+              ? 'bg-emerald-950/50 border-emerald-800/60 text-emerald-300'
+              : apiStatus === 'mock_fallback'
+              ? 'bg-amber-950/50 border-amber-800/60 text-amber-300'
+              : 'bg-slate-900/60 border-slate-800/70 text-slate-400'
+          }`}
+          title={
+            apiStatus === 'live'
+              ? 'FastAPI intelligence backend connected and healthy'
+              : apiStatus === 'mock_fallback'
+              ? 'Backend unreachable or CORS blocked - using synthetic mock data fallback'
+              : 'Verifying backend connection...'
+          }
+        >
+          <span
+            className={`w-2 h-2 rounded-full ${
+              apiStatus === 'live'
+                ? 'bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.8)]'
+                : apiStatus === 'mock_fallback'
+                ? 'bg-amber-400 shadow-[0_0_8px_rgba(251,191,36,0.8)]'
+                : 'bg-slate-400 animate-pulse'
+            }`}
+          />
+          <span className="font-semibold text-[11px] tracking-wide">
+            {apiStatus === 'live'
+              ? 'API: LIVE'
+              : apiStatus === 'mock_fallback'
+              ? 'API: MOCK FALLBACK'
+              : 'API: CONNECTING'}
+          </span>
+        </div>
+
         {/* Synthetic Time Synchronization */}
         <div className="hidden sm:flex items-center gap-1.5 text-xs font-mono text-slate-400 bg-slate-900/60 border border-slate-800/70 px-2.5 py-1.5 rounded-md">
           <Clock className="w-3.5 h-3.5 text-slate-400" />

@@ -13,6 +13,7 @@ import { EvidenceModal } from './components/evidence/EvidenceModal';
 import { incidentService } from './services/incidentService';
 import { evidenceService } from './services/evidenceService';
 import { investigationService } from './services/investigationService';
+import { apiClient, ApiConnectionState } from './services/apiClient';
 
 import {
   Incident,
@@ -33,15 +34,25 @@ export default function App() {
   const [evidenceList, setEvidenceList] = useState<Evidence[]>([]);
   const [findings, setFindings] = useState<Finding[]>([]);
   const [preventionScenario, setPreventionScenario] = useState<PreventionScenario | null>(null);
+  const [apiStatus, setApiStatus] = useState<ApiConnectionState>('connecting');
 
   // Evidence modal inspection state
   const [modalEvidence, setModalEvidence] = useState<Evidence | null>(null);
   // Selected evidence inside the dedicated evidence view
   const [selectedEvidenceView, setSelectedEvidenceView] = useState<Evidence | null>(null);
 
-  // Load initial synthetic data from service layer
+  // Check backend health and load data from service layer
   useEffect(() => {
     async function loadData() {
+      // 1. Check live health endpoint
+      try {
+        const isHealthy = await apiClient.checkHealth();
+        setApiStatus(isHealthy ? 'live' : 'mock_fallback');
+      } catch {
+        setApiStatus('mock_fallback');
+      }
+
+      // 2. Load incident and topology through services (live or mock fallback)
       const inc = await incidentService.getIncidentById('INC-2026-001');
       if (inc) setIncident(inc);
 
@@ -103,6 +114,7 @@ export default function App() {
         <Header
           currentIncident={incident}
           onNavigateToView={(v) => setActiveView(v as NavView)}
+          apiStatus={apiStatus}
         />
 
         {/* View Switcher Container */}

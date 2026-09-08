@@ -1,6 +1,8 @@
-import React, { useState } from 'react';
-import { Evidence, EvidenceCategory } from '../../types';
+import React, { useState, useEffect } from 'react';
+import { Evidence, EvidenceCategory, UploadedEvidenceItem } from '../../types';
 import { EvidenceBadge } from '../common/EvidenceBadge';
+import { UploadEvidenceModal } from './UploadEvidenceModal';
+import { evidenceService } from '../../services/evidenceService';
 import {
   Files,
   Search,
@@ -13,6 +15,10 @@ import {
   Cpu,
   Download,
   Filter,
+  UploadCloud,
+  Trash2,
+  Hash,
+  HardDrive,
 } from 'lucide-react';
 
 interface EvidenceViewProps {
@@ -28,8 +34,73 @@ export const EvidenceView: React.FC<EvidenceViewProps> = ({
 }) => {
   const [selectedCategory, setSelectedCategory] = useState<string>('ALL');
   const [searchQuery, setSearchQuery] = useState<string>('');
+  const [isUploadModalOpen, setIsUploadModalOpen] = useState<boolean>(false);
+  const [uploadedItems, setUploadedItems] = useState<UploadedEvidenceItem[]>([]);
+  const [activeTabFilter, setActiveTabFilter] = useState<'all' | 'synthetic' | 'uploaded'>('all');
 
-  const activeEvidence = selectedEvidence || evidenceList[0];
+  // Load uploaded items from service
+  useEffect(() => {
+    async function loadUploads() {
+      const uploads = await evidenceService.getUploadedEvidence('INC-2026-001');
+      setUploadedItems(uploads);
+    }
+    loadUploads();
+  }, []);
+
+  const handleUploadSuccess = (newItem: UploadedEvidenceItem) => {
+    setUploadedItems((prev) => [newItem, ...prev.filter((i) => i.evidenceId !== newItem.evidenceId)]);
+  };
+
+  const handleDeleteUploadedItem = async (evidenceId: string) => {
+    if (window.confirm(`Are you sure you want to remove uploaded evidence ${evidenceId}?`)) {
+      await evidenceService.deleteUploadedEvidence(evidenceId);
+      setUploadedItems((prev) => prev.filter((i) => i.evidenceId !== evidenceId));
+    }
+  };
+
+  // Convert uploaded items to Evidence representation for uniform display
+  const convertedUploadedItems: Evidence[] = uploadedItems.map((item) => {
+    let format: 'csv' | 'pdf' | 'text' | 'image' = 'text';
+    const ext = item.originalFilename.split('.').pop()?.toLowerCase();
+    if (ext === 'csv') format = 'csv';
+    else if (ext === 'pdf') format = 'pdf';
+    else if (['jpg', 'jpeg', 'png'].includes(ext || '')) format = 'image';
+
+    return {
+      id: item.evidenceId,
+      filename: item.originalFilename,
+      source: `User Ingestion (${item.storageUri.startsWith('gs://') ? 'GCS' : 'Local Storage'})`,
+      sourceType: item.sourceType as EvidenceCategory,
+      timestamp: item.uploadedAt,
+      normalizedTimestamp: item.uploadedAt,
+      assetId: item.assetId || 'UNASSIGNED',
+      assetName: item.assetId || 'Unassigned Plant Asset',
+      extractedEvent: item.description || `Uploaded industrial evidence file: ${item.originalFilename}`,
+      confidence: 100,
+      originalEvidenceRef: item.storageUri,
+      fileSize: `${(item.fileSize / 1024).toFixed(1)} KB`,
+      format,
+      previewRows: item.metadata?.preview_rows,
+      rawContent: item.metadata?.preview_text,
+    };
+  });
+
+  // Combine baseline synthetic + newly uploaded items based on activeTabFilter
+  let combinedList: Evidence[] = [];
+  if (activeTabFilter === 'all') {
+    combinedList = [...convertedUploadedItems, ...evidenceList];
+  } else if (activeTabFilter === 'synthetic') {
+    combinedList = [...evidenceList];
+  } else {
+    combinedList = [...convertedUploadedItems];
+  }
+
+  const activeEvidence = selectedEvidence || combinedList[0];
+
+  // Determine if active evidence is an uploaded artifact
+  const activeUploadedRecord = uploadedItems.find(
+    (u) => u.evidenceId.toUpperCase() === activeEvidence?.id.toUpperCase()
+  );
 
   const categories: string[] = [
     'ALL',
@@ -41,7 +112,7 @@ export const EvidenceView: React.FC<EvidenceViewProps> = ({
     'Technician Notes & Photos',
   ];
 
-  const filteredEvidence = evidenceList.filter((item) => {
+  const filteredEvidence = combinedList.filter((item) => {
     const matchesCategory =
       selectedCategory === 'ALL' || item.sourceType === selectedCategory;
     const matchesSearch =
@@ -64,6 +135,11 @@ export const EvidenceView: React.FC<EvidenceViewProps> = ({
             <span className="text-xs px-2 py-0.5 rounded bg-emerald-950 border border-emerald-800 text-emerald-300 font-mono">
               6 Ingested Modalities
             </span>
+            {uploadedItems.length > 0 && (
+              <span className="text-xs px-2 py-0.5 rounded bg-blue-950 border border-blue-800 text-blue-300 font-mono">
+                {uploadedItems.length} Uploaded
+              </span>
+            )}
           </div>
           <h1 className="text-2xl font-bold font-mono text-white mt-1">
             Industrial Evidence Repository
@@ -73,83 +149,146 @@ export const EvidenceView: React.FC<EvidenceViewProps> = ({
           </p>
         </div>
 
-        {/* Search */}
-        <div className="relative w-full md:w-72">
-          <Search className="w-4 h-4 text-slate-500 absolute left-3 top-3" />
-          <input
-            type="text"
-            placeholder="Search artifacts, tags, rows..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full pl-9 pr-4 py-2 rounded-lg bg-slate-900 border border-slate-800 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-cyan-500 font-mono"
-          />
+        {/* Action Controls: Search + Upload Evidence Button */}
+        <div className="flex items-center gap-3">
+          <div className="relative w-full md:w-64">
+            <Search className="w-4 h-4 text-slate-500 absolute left-3 top-3" />
+            <input
+              type="text"
+              placeholder="Search artifacts, tags, rows..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full pl-9 pr-4 py-2 rounded-lg bg-slate-900 border border-slate-800 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-cyan-500 font-mono"
+            />
+          </div>
+
+          <button
+            id="open-upload-evidence-modal-btn"
+            onClick={() => setIsUploadModalOpen(true)}
+            className="flex items-center gap-2 px-4 py-2 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white font-mono text-xs font-bold transition-all shadow-lg shadow-cyan-950/60 shrink-0"
+          >
+            <UploadCloud className="w-4 h-4" />
+            <span>Upload Evidence</span>
+          </button>
         </div>
       </div>
 
-      {/* Category Pills */}
-      <div className="flex flex-wrap items-center gap-1.5 font-mono text-xs">
-        {categories.map((cat) => (
+      {/* Origin Tab Filters & Category Pills */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
+        {/* Category Pills */}
+        <div className="flex flex-wrap items-center gap-1.5 font-mono text-xs">
+          {categories.map((cat) => (
+            <button
+              key={cat}
+              onClick={() => setSelectedCategory(cat)}
+              className={`px-3 py-1.5 rounded-lg transition-colors ${
+                selectedCategory === cat
+                  ? 'bg-cyan-950 text-cyan-300 border border-cyan-800 font-bold'
+                  : 'text-slate-400 hover:text-white bg-slate-900/60 border border-slate-800/80'
+              }`}
+            >
+              {cat}
+            </button>
+          ))}
+        </div>
+
+        {/* Origin Scope Toggle */}
+        <div className="flex items-center gap-1 p-1 rounded-lg bg-slate-900 border border-slate-800 text-xs font-mono self-start md:self-auto">
           <button
-            key={cat}
-            onClick={() => setSelectedCategory(cat)}
-            className={`px-3 py-1.5 rounded-lg transition-colors ${
-              selectedCategory === cat
-                ? 'bg-cyan-950 text-cyan-300 border border-cyan-800 font-bold'
-                : 'text-slate-400 hover:text-white bg-slate-900/60 border border-slate-800/80'
+            onClick={() => setActiveTabFilter('all')}
+            className={`px-2.5 py-1 rounded transition-colors ${
+              activeTabFilter === 'all'
+                ? 'bg-slate-800 text-white font-bold'
+                : 'text-slate-400 hover:text-white'
             }`}
           >
-            {cat}
+            All ({evidenceList.length + uploadedItems.length})
           </button>
-        ))}
+          <button
+            onClick={() => setActiveTabFilter('synthetic')}
+            className={`px-2.5 py-1 rounded transition-colors ${
+              activeTabFilter === 'synthetic'
+                ? 'bg-slate-800 text-cyan-300 font-bold'
+                : 'text-slate-400 hover:text-white'
+            }`}
+          >
+            Synthetic Grounding ({evidenceList.length})
+          </button>
+          <button
+            onClick={() => setActiveTabFilter('uploaded')}
+            className={`px-2.5 py-1 rounded transition-colors ${
+              activeTabFilter === 'uploaded'
+                ? 'bg-slate-800 text-blue-300 font-bold'
+                : 'text-slate-400 hover:text-white'
+            }`}
+          >
+            Newly Uploaded ({uploadedItems.length})
+          </button>
+        </div>
       </div>
 
       {/* Main 2-Column Split: List + Deep Provenance Inspector */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
         {/* Left: Artifact List (5 Cols) */}
         <div className="lg:col-span-5 space-y-3 max-h-[75vh] overflow-y-auto pr-1">
-          {filteredEvidence.map((item) => {
-            const isSelected = activeEvidence?.id === item.id;
-            return (
-              <div
-                key={item.id}
-                onClick={() => onSelectEvidence(item)}
-                className={`p-4 rounded-xl border transition-all cursor-pointer ${
-                  isSelected
-                    ? 'bg-cyan-950/40 border-cyan-600 shadow-lg shadow-cyan-950/50 ring-1 ring-cyan-500/50'
-                    : 'bg-[#0a0f1d] border-slate-800 hover:border-slate-700'
-                }`}
-              >
-                <div className="flex items-center justify-between mb-2">
-                  <EvidenceBadge category={item.sourceType} size="sm" />
-                  <span className="text-[10px] font-mono text-emerald-400 font-semibold">
-                    {item.confidence}% Grounded
-                  </span>
-                </div>
+          {filteredEvidence.length === 0 ? (
+            <div className="p-8 rounded-xl border border-slate-800 bg-[#0a0f1d] text-center text-slate-500 font-mono text-xs">
+              No evidence artifacts match the selected filters.
+            </div>
+          ) : (
+            filteredEvidence.map((item) => {
+              const isSelected = activeEvidence?.id === item.id;
+              const isUploaded = uploadedItems.some((u) => u.evidenceId === item.id);
 
-                <div className="flex items-center gap-2">
-                  {item.format === 'csv' ? (
-                    <FileSpreadsheet className="w-4 h-4 text-cyan-400 shrink-0" />
-                  ) : item.format === 'pdf' ? (
-                    <FileCode className="w-4 h-4 text-purple-400 shrink-0" />
-                  ) : (
-                    <Database className="w-4 h-4 text-blue-400 shrink-0" />
-                  )}
-                  <h3 className="font-mono text-xs font-bold text-white truncate">
-                    {item.filename}
-                  </h3>
-                </div>
+              return (
+                <div
+                  key={item.id}
+                  onClick={() => onSelectEvidence(item)}
+                  className={`p-4 rounded-xl border transition-all cursor-pointer ${
+                    isSelected
+                      ? 'bg-cyan-950/40 border-cyan-600 shadow-lg shadow-cyan-950/50 ring-1 ring-cyan-500/50'
+                      : 'bg-[#0a0f1d] border-slate-800 hover:border-slate-700'
+                  }`}
+                >
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center gap-1.5">
+                      <EvidenceBadge category={item.sourceType} size="sm" />
+                      {isUploaded && (
+                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-950 text-blue-300 border border-blue-800 font-mono font-bold">
+                          NEWLY UPLOADED
+                        </span>
+                      )}
+                    </div>
+                    <span className="text-[10px] font-mono text-emerald-400 font-semibold">
+                      {isUploaded ? 'UPLOADED' : `${item.confidence}% Grounded`}
+                    </span>
+                  </div>
 
-                <p className="text-xs text-slate-300 font-sans mt-2 line-clamp-2 leading-relaxed">
-                  {item.extractedEvent}
-                </p>
+                  <div className="flex items-center gap-2">
+                    {item.format === 'csv' ? (
+                      <FileSpreadsheet className="w-4 h-4 text-cyan-400 shrink-0" />
+                    ) : item.format === 'pdf' ? (
+                      <FileCode className="w-4 h-4 text-purple-400 shrink-0" />
+                    ) : (
+                      <Database className="w-4 h-4 text-blue-400 shrink-0" />
+                    )}
+                    <h3 className="font-mono text-xs font-bold text-white truncate">
+                      {item.filename}
+                    </h3>
+                  </div>
 
-                <div className="mt-3 pt-2.5 border-t border-slate-800/70 flex items-center justify-between text-[11px] font-mono text-slate-500">
-                  <span>Target: {item.assetId}</span>
-                  <span>{item.fileSize}</span>
+                  <p className="text-xs text-slate-300 font-sans mt-2 line-clamp-2 leading-relaxed">
+                    {item.extractedEvent}
+                  </p>
+
+                  <div className="mt-3 pt-2.5 border-t border-slate-800/70 flex items-center justify-between text-[11px] font-mono text-slate-500">
+                    <span>Target: {item.assetId}</span>
+                    <span>{item.fileSize}</span>
+                  </div>
                 </div>
-              </div>
-            );
-          })}
+              );
+            })
+          )}
         </div>
 
         {/* Right: Detailed Deep Inspector (7 Cols) */}
@@ -164,21 +303,41 @@ export const EvidenceView: React.FC<EvidenceViewProps> = ({
                     <span className="text-xs font-mono text-slate-500">
                       ID: {activeEvidence.id}
                     </span>
+                    {activeUploadedRecord && (
+                      <span className="text-[10px] px-2 py-0.5 rounded bg-blue-950 text-blue-300 border border-blue-800 font-mono font-bold">
+                        STATUS: {activeUploadedRecord.processingStatus}
+                      </span>
+                    )}
                   </div>
                   <h2 className="text-lg font-mono font-bold text-white flex items-center gap-2">
                     {activeEvidence.filename}
                   </h2>
                 </div>
-                <div className="text-right font-mono text-xs">
-                  <div className="flex items-center gap-1.5 text-emerald-400 font-bold">
-                    <ShieldCheck className="w-4 h-4" />
-                    <span>{activeEvidence.confidence}% Grounded</span>
+
+                <div className="flex items-center gap-3">
+                  {activeUploadedRecord && (
+                    <button
+                      id="delete-uploaded-evidence-btn"
+                      onClick={() => handleDeleteUploadedItem(activeUploadedRecord.evidenceId)}
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-rose-950/40 hover:bg-rose-900/60 border border-rose-800/80 text-rose-300 font-mono text-xs transition-colors"
+                      title="Delete this uploaded evidence artifact"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                      <span>Delete</span>
+                    </button>
+                  )}
+
+                  <div className="text-right font-mono text-xs">
+                    <div className="flex items-center gap-1.5 text-emerald-400 font-bold">
+                      <ShieldCheck className="w-4 h-4" />
+                      <span>{activeUploadedRecord ? 'Verified SHA-256' : `${activeEvidence.confidence}% Grounded`}</span>
+                    </div>
+                    <span className="text-slate-500 text-[11px]">Audit Hash Validated</span>
                   </div>
-                  <span className="text-slate-500 text-[11px]">Audit Hash Validated</span>
                 </div>
               </div>
 
-              {/* 7 Required Industrial Evidence Details */}
+              {/* 7 Industrial Evidence Provenance Details */}
               <div className="grid grid-cols-2 gap-4 p-4 rounded-xl bg-slate-900/60 border border-slate-800 font-mono text-xs">
                 <div>
                   <span className="text-slate-500 block text-[10px] uppercase">1. Source System</span>
@@ -203,39 +362,48 @@ export const EvidenceView: React.FC<EvidenceViewProps> = ({
                   </span>
                 </div>
                 <div>
-                  <span className="text-slate-500 block text-[10px] uppercase">5. Confidence Score</span>
+                  <span className="text-slate-500 block text-[10px] uppercase">5. Processing Status</span>
                   <div className="flex items-center gap-2 mt-1">
-                    <div className="w-24 h-2 rounded-full bg-slate-800 overflow-hidden">
-                      <div
-                        className="h-full bg-emerald-400 rounded-full"
-                        style={{ width: `${activeEvidence.confidence}%` }}
-                      />
-                    </div>
-                    <span className="text-emerald-400 font-bold">{activeEvidence.confidence}%</span>
+                    <span className="px-2 py-0.5 rounded bg-slate-800 text-emerald-400 border border-emerald-800/60 font-bold">
+                      {activeUploadedRecord ? activeUploadedRecord.processingStatus : 'GROUNDED'}
+                    </span>
                   </div>
                 </div>
               </div>
 
-              {/* 6. Extracted Event */}
+              {/* Extracted Event / Description */}
               <div className="p-4 rounded-xl bg-cyan-950/20 border border-cyan-800/40">
                 <span className="text-cyan-400 font-mono text-xs uppercase font-bold tracking-wider flex items-center gap-2 mb-1.5">
                   <CheckCircle2 className="w-4 h-4" />
-                  6. Extracted Incident Event
+                  6. Extracted Incident Event / Summary
                 </span>
                 <p className="text-sm text-cyan-100 font-sans leading-relaxed">
                   {activeEvidence.extractedEvent}
                 </p>
               </div>
 
-              {/* 7. Original Evidence Reference */}
+              {/* Original Evidence Reference / Storage URI */}
               <div>
                 <span className="text-slate-400 font-mono text-xs uppercase font-bold tracking-wider block mb-1.5">
-                  7. Original Evidence Reference (Provenance Anchor)
+                  7. Original Evidence Reference & Storage URI
                 </span>
-                <div className="p-3 rounded-lg bg-black/40 border border-slate-800 font-mono text-xs text-amber-300 select-all">
+                <div className="p-3 rounded-lg bg-black/40 border border-slate-800 font-mono text-xs text-amber-300 select-all break-all">
                   {activeEvidence.originalEvidenceRef}
                 </div>
               </div>
+
+              {/* SHA-256 Digest for Uploaded Item */}
+              {activeUploadedRecord && (
+                <div className="p-3 rounded-lg bg-black/40 border border-emerald-900/60 font-mono text-xs">
+                  <span className="text-emerald-400 uppercase text-[10px] font-bold block mb-1">
+                    SHA-256 Audit Integrity Digest
+                  </span>
+                  <div className="text-emerald-300 text-[11px] select-all break-all flex items-center gap-2">
+                    <Hash className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                    <span>{activeUploadedRecord.sha256Hash}</span>
+                  </div>
+                </div>
+              )}
 
               {/* Raw Ingestion Data Sample */}
               {activeEvidence.previewRows && activeEvidence.previewRows.length > 0 && (
@@ -273,7 +441,7 @@ export const EvidenceView: React.FC<EvidenceViewProps> = ({
               {activeEvidence.rawContent && (
                 <div>
                   <span className="text-slate-400 font-mono text-xs uppercase font-bold tracking-wider block mb-2">
-                    Ingested Document Excerpt
+                    Ingested Document Excerpt / Content Preview
                   </span>
                   <pre className="p-4 rounded-lg border border-slate-800 bg-black/40 text-xs text-slate-300 font-mono whitespace-pre-wrap leading-relaxed max-h-48 overflow-y-auto">
                     {activeEvidence.rawContent}
@@ -293,6 +461,15 @@ export const EvidenceView: React.FC<EvidenceViewProps> = ({
           </div>
         </div>
       </div>
+
+      {/* Upload Evidence Modal */}
+      <UploadEvidenceModal
+        incidentId="INC-2026-001"
+        isOpen={isUploadModalOpen}
+        onClose={() => setIsUploadModalOpen(false)}
+        onUploadSuccess={handleUploadSuccess}
+      />
     </div>
   );
 };
+

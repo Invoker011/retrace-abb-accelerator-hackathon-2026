@@ -6,6 +6,7 @@ from backend.schemas.finding import Finding, FindingClassification
 from backend.schemas.prevention import PreventionNode, PreventionSafeguard, PreventionScenario
 from backend.schemas.investigation import InvestigationQueryRequest, InvestigationQueryResponse
 from backend.schemas.context import IncidentContextResponse
+from backend.schemas.upload import UploadedEvidence, EvidenceUploadResponse
 
 __all__ = [
     "Incident",
@@ -13,6 +14,8 @@ __all__ = [
     "Asset",
     "AssetRelationship",
     "Evidence",
+    "UploadedEvidence",
+    "EvidenceUploadResponse",
     "Finding",
     "FindingClassification",
     "PreventionNode",

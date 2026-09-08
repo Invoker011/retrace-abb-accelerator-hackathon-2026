@@ -145,3 +145,21 @@ export interface PreventionScenario {
     recommendation: string;
   }>;
 }
+
+export interface UploadedEvidenceItem {
+  evidenceId: string;
+  incidentId: string;
+  sourceType: EvidenceCategory | string;
+  originalFilename: string;
+  storedFilename: string;
+  contentType: string;
+  fileSize: number;
+  assetId?: string | null;
+  description?: string | null;
+  storageUri: string;
+  uploadedAt: string;
+  processingStatus: string;
+  sha256Hash: string;
+  metadata?: Record<string, any>;
+}
+
