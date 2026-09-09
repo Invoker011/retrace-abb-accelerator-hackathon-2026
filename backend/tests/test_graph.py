@@ -182,6 +182,124 @@ class TestContextGraphRepository(unittest.TestCase):
 
         mock_driver.session.assert_called_with(database="custom_auradb")
 
+    def test_neo4j_cypher_syntax_and_null_filtering(self):
+        """Verify Cypher queries in sync_incident use valid syntax and filter null identifiers."""
+        mock_driver = MagicMock()
+        mock_session = MagicMock()
+        mock_driver.session.return_value.__enter__.return_value = mock_session
+
+        repo = Neo4jIncidentGraphRepository(driver=mock_driver)
+
+        # Sync with rich data including valid and null/missing evidence & findings
+        incident = {"id": "INC-2026-001", "title": "Main Slurry Cascade"}
+        assets = [
+            {"id": "VFD-204", "name": "Variable Frequency Drive"},
+            {"id": "M-204", "name": "Slurry Pump Motor"},
+            {"id": "P-204", "name": "Centrifugal Slurry Pump"},
+            {"id": "PLC-204", "name": "Control Logic Unit"},
+        ]
+        events = [
+            {"id": "EVT-1", "title": "Vibration Spike", "assetId": "M-204", "evidenceId": "EVD-001"},
+            {"id": "EVT-2", "title": "Telemetry Lag", "assetId": None, "evidenceId": None},  # Null asset & evidence
+        ]
+        evidence = [
+            {"id": "EVD-001", "filename": "vfd_log.csv", "assetId": "VFD-204"},
+            {"id": None, "filename": "corrupt_log.csv", "assetId": None},  # Missing ID
+            {"evidence_id": "", "filename": "empty_id.csv", "assetId": "M-204"},  # Empty ID
+            {"evidence_id": "EVD-002", "filename": "scada_events.csv", "assetId": None},  # Valid ID, no asset
+        ]
+        findings = [
+            {"id": "FND-001", "statement": "Vibration excursion", "assetId": "M-204", "evidenceIds": ["EVD-001"]},
+            {"id": "FND-002", "statement": "Hypothetical issue", "assetId": None, "evidenceIds": []},  # No evidence
+            {"id": "FND-003", "statement": "Finding with None in evidenceIds", "assetId": "P-204", "evidenceIds": [None, ""]},
+        ]
+
+        res = repo.sync_incident(incident, assets, events, evidence, findings, [])
+        self.assertEqual(res["status"], "synchronized")
+
+        # Inspect every query executed during sync
+        executed_queries = [call[0][0] for call in mock_session.run.call_args_list]
+
+        for query in executed_queries:
+            # Cypher syntax check: UNWIND must not be directly followed by WHERE
+            lines = [line.strip() for line in query.strip().split("\n") if line.strip()]
+            for i in range(len(lines) - 1):
+                curr = lines[i].upper()
+                nxt = lines[i + 1].upper()
+                if curr.startswith("UNWIND"):
+                    self.assertFalse(
+                        nxt.startswith("WHERE"),
+                        f"Found invalid Cypher 'UNWIND ... WHERE' without 'WITH' in query:\n{query}"
+                    )
+
+            # Node MERGE check: Never MERGE on a null or empty identifier without a preceding WHERE filter
+            if "MERGE (evidence:" in query:
+                self.assertIn("WHERE ev.evidence_id IS NOT NULL", query)
+            if "MERGE (event:" in query:
+                self.assertIn("WHERE e.event_id IS NOT NULL", query)
+            if "MERGE (asset:" in query:
+                self.assertIn("WHERE a.asset_id IS NOT NULL", query)
+            if "MERGE (finding:" in query:
+                self.assertIn("WHERE f.finding_id IS NOT NULL", query)
+
+        # Verify topology couplings were executed with parameterized asset IDs
+        powers_query = [q for q in executed_queries if "[:POWERS]->" in q]
+        self.assertTrue(len(powers_query) >= 1)
+        self.assertIn("$vfd_id", powers_query[0])
+        self.assertIn("$m_id", powers_query[0])
+
+        drives_query = [q for q in executed_queries if "[:DRIVES]->" in q]
+        self.assertTrue(len(drives_query) >= 1)
+        self.assertIn("$m_id", drives_query[0])
+        self.assertIn("$p_id", drives_query[0])
+
+        monitored_by_query = [q for q in executed_queries if "[:MONITORED_BY]->" in q]
+        self.assertTrue(len(monitored_by_query) >= 1)
+        self.assertIn("$p_id", monitored_by_query[0])
+        self.assertIn("$plc_id", monitored_by_query[0])
+
+    def test_in_memory_sync_null_evidence_and_topology(self):
+        """Verify InMemoryIncidentGraphRepository skips null evidence safely and preserves topology."""
+        repo = InMemoryIncidentGraphRepository()
+        incident = {"id": "INC-TEST-002", "title": "Slurry Pump Test"}
+        assets = [
+            {"id": "VFD-204", "name": "VFD-204 Drive"},
+            {"id": "M-204", "name": "Motor M-204"},
+            {"id": "P-204", "name": "Pump P-204"},
+        ]
+        evidence = [
+            {"id": "EVD-VALID-1", "filename": "vfd.csv", "assetId": "VFD-204"},
+            {"id": None, "filename": "invalid.csv"},  # Missing ID
+            {"evidence_id": "", "filename": "empty.csv"},  # Empty ID
+        ]
+        findings = [
+            {"id": "FND-1", "statement": "Finding 1", "assetId": "M-204", "evidenceIds": ["EVD-VALID-1"]},
+            {"id": "FND-2", "statement": "Finding 2", "evidenceIds": None},  # None evidenceIds
+        ]
+
+        # 1. First sync
+        res1 = repo.sync_incident(incident, assets, [], evidence, findings, [])
+        self.assertEqual(res1["status"], "synchronized")
+
+        subgraph = repo.get_incident_subgraph("INC-TEST-002")
+        node_ids = {n["id"] for n in subgraph["nodes"]}
+
+        # Valid evidence exists, null/empty IDs do NOT exist
+        self.assertIn("EVD-VALID-1", node_ids)
+        self.assertNotIn(None, node_ids)
+        self.assertNotIn("", node_ids)
+
+        # Verify VFD-204 POWERS M-204 and M-204 DRIVES P-204
+        edge_tuples = {(e["source"], e["relationship"], e["target"]) for e in subgraph["edges"]}
+        self.assertIn(("VFD-204", "POWERS", "M-204"), edge_tuples)
+        self.assertIn(("M-204", "DRIVES", "P-204"), edge_tuples)
+
+        # 2. Repeated sync remains idempotent
+        res2 = repo.sync_incident(incident, assets, [], evidence, findings, [])
+        subgraph2 = repo.get_incident_subgraph("INC-TEST-002")
+        self.assertEqual(len(subgraph2["nodes"]), len(subgraph["nodes"]))
+        self.assertEqual(len(subgraph2["edges"]), len(subgraph["edges"]))
+
     def test_get_neo4j_session_helper_optional(self):
         """Verify get_neo4j_session context manager respects optional database."""
         from backend.graph.client import get_neo4j_session

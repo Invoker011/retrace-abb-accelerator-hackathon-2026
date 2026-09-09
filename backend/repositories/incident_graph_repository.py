@@ -263,6 +263,8 @@ class Neo4jIncidentGraphRepository(IncidentGraphRepositoryInterface):
                 session.run(
                     f"""
                     UNWIND $assets AS a
+                    WITH a
+                    WHERE a.asset_id IS NOT NULL AND a.asset_id <> ''
                     MERGE (asset:{LABEL_ASSET} {{asset_id: a.asset_id}})
                     ON CREATE SET
                       asset.name = a.name,
@@ -288,9 +290,12 @@ class Neo4jIncidentGraphRepository(IncidentGraphRepositoryInterface):
 
             # 3. Merge Events & (Incident)-[:HAS_EVENT]->(Event), (Event)-[:OCCURRED_ON]->(Asset)
             if event_params:
+                # 3A: Merge Event node and link to Incident (HAS_EVENT)
                 session.run(
                     f"""
                     UNWIND $events AS e
+                    WITH e
+                    WHERE e.event_id IS NOT NULL AND e.event_id <> ''
                     MERGE (event:{LABEL_EVENT} {{event_id: e.event_id}})
                     ON CREATE SET
                       event.timestamp = e.timestamp,
@@ -302,23 +307,35 @@ class Neo4jIncidentGraphRepository(IncidentGraphRepositoryInterface):
                       event.event_type = e.event_type,
                       event.title = e.title,
                       event.severity = e.severity
-                    WITH event, e
+                    WITH event
                     MATCH (i:{LABEL_INCIDENT} {{incident_id: $incident_id}})
                     MERGE (i)-[:{REL_HAS_EVENT}]->(event)
-                    WITH event, e
-                    WHERE e.asset_id IS NOT NULL
-                    MATCH (a:{LABEL_ASSET} {{asset_id: e.asset_id}})
-                    MERGE (event)-[:{REL_OCCURRED_ON}]->(a)
                     """,
                     {"events": event_params, "incident_id": incident_id},
                 )
-                total_rels += len(event_params) * 2
+                total_rels += len(event_params)
 
-                # Connect Event to Evidence if supported
+                # 3B: Connect Event to Asset (OCCURRED_ON) - filtered safely before MATCH/MERGE
                 session.run(
                     f"""
                     UNWIND $events AS e
-                    WHERE e.evidence_id IS NOT NULL
+                    WITH e
+                    WHERE e.event_id IS NOT NULL AND e.event_id <> ''
+                      AND e.asset_id IS NOT NULL AND e.asset_id <> ''
+                    MATCH (event:{LABEL_EVENT} {{event_id: e.event_id}})
+                    MATCH (a:{LABEL_ASSET} {{asset_id: e.asset_id}})
+                    MERGE (event)-[:{REL_OCCURRED_ON}]->(a)
+                    """,
+                    {"events": event_params},
+                )
+
+                # 3C: Connect Event to Evidence (SUPPORTED_BY) - filtered safely before MATCH/MERGE
+                session.run(
+                    f"""
+                    UNWIND $events AS e
+                    WITH e
+                    WHERE e.event_id IS NOT NULL AND e.event_id <> ''
+                      AND e.evidence_id IS NOT NULL AND e.evidence_id <> ''
                     MATCH (event:{LABEL_EVENT} {{event_id: e.event_id}})
                     MATCH (ev:{LABEL_EVIDENCE} {{evidence_id: e.evidence_id}})
                     MERGE (event)-[:{REL_SUPPORTED_BY}]->(ev)
@@ -328,9 +345,12 @@ class Neo4jIncidentGraphRepository(IncidentGraphRepositoryInterface):
 
             # 4. Merge Evidence & (Incident)-[:HAS_EVIDENCE]->(Evidence), (Evidence)-[:RELATED_TO]->(Asset)
             if evidence_params:
+                # 4A: Merge Evidence node and link to Incident (HAS_EVIDENCE)
                 session.run(
                     f"""
                     UNWIND $evidence AS ev
+                    WITH ev
+                    WHERE ev.evidence_id IS NOT NULL AND ev.evidence_id <> ''
                     MERGE (evidence:{LABEL_EVIDENCE} {{evidence_id: ev.evidence_id}})
                     ON CREATE SET
                       evidence.source_type = ev.source_type,
@@ -342,23 +362,36 @@ class Neo4jIncidentGraphRepository(IncidentGraphRepositoryInterface):
                       evidence.filename = ev.filename,
                       evidence.processing_status = ev.processing_status,
                       evidence.asset_id = ev.asset_id
-                    WITH evidence, ev
+                    WITH evidence
                     MATCH (i:{LABEL_INCIDENT} {{incident_id: $incident_id}})
                     MERGE (i)-[:{REL_HAS_EVIDENCE}]->(evidence)
-                    WITH evidence, ev
-                    WHERE ev.asset_id IS NOT NULL
-                    MATCH (a:{LABEL_ASSET} {{asset_id: ev.asset_id}})
-                    MERGE (evidence)-[:{REL_RELATED_TO}]->(a)
                     """,
                     {"evidence": evidence_params, "incident_id": incident_id},
                 )
                 total_rels += len(evidence_params)
 
+                # 4B: Connect Evidence to Asset (RELATED_TO) - filtered safely before MATCH/MERGE
+                session.run(
+                    f"""
+                    UNWIND $evidence AS ev
+                    WITH ev
+                    WHERE ev.evidence_id IS NOT NULL AND ev.evidence_id <> ''
+                      AND ev.asset_id IS NOT NULL AND ev.asset_id <> ''
+                    MATCH (evidence:{LABEL_EVIDENCE} {{evidence_id: ev.evidence_id}})
+                    MATCH (a:{LABEL_ASSET} {{asset_id: ev.asset_id}})
+                    MERGE (evidence)-[:{REL_RELATED_TO}]->(a)
+                    """,
+                    {"evidence": evidence_params},
+                )
+
             # 5. Merge Findings & (Incident)-[:HAS_FINDING]->(Finding)
             if finding_params:
+                # 5A: Merge Finding node and link to Incident (HAS_FINDING)
                 session.run(
                     f"""
                     UNWIND $findings AS f
+                    WITH f
+                    WHERE f.finding_id IS NOT NULL AND f.finding_id <> ''
                     MERGE (finding:{LABEL_FINDING} {{finding_id: f.finding_id}})
                     ON CREATE SET
                       finding.classification = f.classification,
@@ -368,7 +401,7 @@ class Neo4jIncidentGraphRepository(IncidentGraphRepositoryInterface):
                       finding.classification = f.classification,
                       finding.statement = f.statement,
                       finding.confidence_score = f.confidence_score
-                    WITH finding, f
+                    WITH finding
                     MATCH (i:{LABEL_INCIDENT} {{incident_id: $incident_id}})
                     MERGE (i)-[:{REL_HAS_FINDING}]->(finding)
                     """,
@@ -376,10 +409,14 @@ class Neo4jIncidentGraphRepository(IncidentGraphRepositoryInterface):
                 )
                 total_rels += len(finding_params)
 
+            # 5B: Connect Finding to Supporting Evidence
             if finding_evidence_links:
                 session.run(
                     f"""
                     UNWIND $links AS link
+                    WITH link
+                    WHERE link.finding_id IS NOT NULL AND link.finding_id <> ''
+                      AND link.evidence_id IS NOT NULL AND link.evidence_id <> ''
                     MATCH (f:{LABEL_FINDING} {{finding_id: link.finding_id}})
                     MATCH (ev:{LABEL_EVIDENCE} {{evidence_id: link.evidence_id}})
                     MERGE (f)-[:{REL_SUPPORTED_BY}]->(ev)
@@ -388,10 +425,14 @@ class Neo4jIncidentGraphRepository(IncidentGraphRepositoryInterface):
                 )
                 total_rels += len(finding_evidence_links)
 
+            # 5C: Connect Finding to Related Asset
             if finding_asset_links:
                 session.run(
                     f"""
                     UNWIND $links AS link
+                    WITH link
+                    WHERE link.finding_id IS NOT NULL AND link.finding_id <> ''
+                      AND link.asset_id IS NOT NULL AND link.asset_id <> ''
                     MATCH (f:{LABEL_FINDING} {{finding_id: link.finding_id}})
                     MATCH (a:{LABEL_ASSET} {{asset_id: link.asset_id}})
                     MERGE (f)-[:{REL_RELATES_TO}]->(a)
@@ -400,18 +441,30 @@ class Neo4jIncidentGraphRepository(IncidentGraphRepositoryInterface):
                 )
                 total_rels += len(finding_asset_links)
 
-            # 6. Asset Topology Coupling (VFD-204 -> M-204 -> P-204 -> PLC-204)
+            # 6. Asset Topology Coupling (VFD-204 POWERS M-204, M-204 DRIVES P-204, P-204 MONITORED_BY PLC-204)
             session.run(
                 f"""
-                MATCH (vfd:{LABEL_ASSET} {{asset_id: 'VFD-204'}}), (m:{LABEL_ASSET} {{asset_id: 'M-204'}})
+                MATCH (vfd:{LABEL_ASSET} {{asset_id: $vfd_id}})
+                MATCH (m:{LABEL_ASSET} {{asset_id: $m_id}})
                 MERGE (vfd)-[:{REL_POWERS}]->(m)
-                WITH vfd, m
-                MATCH (m2:{LABEL_ASSET} {{asset_id: 'M-204'}}), (p:{LABEL_ASSET} {{asset_id: 'P-204'}})
-                MERGE (m2)-[:{REL_DRIVES}]->(p)
-                WITH p
-                MATCH (p2:{LABEL_ASSET} {{asset_id: 'P-204'}}), (plc:{LABEL_ASSET} {{asset_id: 'PLC-204'}})
-                MERGE (p2)-[:{REL_MONITORED_BY}]->(plc)
-                """
+                """,
+                {"vfd_id": "VFD-204", "m_id": "M-204"},
+            )
+            session.run(
+                f"""
+                MATCH (m:{LABEL_ASSET} {{asset_id: $m_id}})
+                MATCH (p:{LABEL_ASSET} {{asset_id: $p_id}})
+                MERGE (m)-[:{REL_DRIVES}]->(p)
+                """,
+                {"m_id": "M-204", "p_id": "P-204"},
+            )
+            session.run(
+                f"""
+                MATCH (p:{LABEL_ASSET} {{asset_id: $p_id}})
+                MATCH (plc:{LABEL_ASSET} {{asset_id: $plc_id}})
+                MERGE (p)-[:{REL_MONITORED_BY}]->(plc)
+                """,
+                {"p_id": "P-204", "plc_id": "PLC-204"},
             )
             total_rels += 3
 
@@ -431,8 +484,8 @@ class Neo4jIncidentGraphRepository(IncidentGraphRepositoryInterface):
         WITH i, collect(DISTINCT n) + [i] AS all_nodes
         UNWIND all_nodes AS src
         UNWIND all_nodes AS tgt
-        MATCH (src)-[rel]->(tgt)
-        RETURN all_nodes, collect(DISTINCT rel) AS all_rels
+        OPTIONAL MATCH (src)-[rel]->(tgt)
+        RETURN all_nodes, [r IN collect(DISTINCT rel) WHERE r IS NOT NULL] AS all_rels
         """
 
         nodes_out: List[Dict[str, Any]] = []
