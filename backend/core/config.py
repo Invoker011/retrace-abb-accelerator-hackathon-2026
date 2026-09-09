@@ -47,6 +47,8 @@ class Settings:
     NEO4J_URI: Optional[str] = os.getenv("NEO4J_URI")
     NEO4J_USERNAME: Optional[str] = os.getenv("NEO4J_USERNAME")
     NEO4J_PASSWORD: Optional[str] = os.getenv("NEO4J_PASSWORD")
-    NEO4J_DATABASE: str = os.getenv("NEO4J_DATABASE", "neo4j")
+    NEO4J_DATABASE: Optional[str] = (
+        os.getenv("NEO4J_DATABASE", "").strip() or None
+    )
 
 settings = Settings()

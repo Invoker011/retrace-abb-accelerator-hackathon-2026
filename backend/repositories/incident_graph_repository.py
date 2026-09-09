@@ -83,7 +83,8 @@ class Neo4jIncidentGraphRepository(IncidentGraphRepositoryInterface):
 
     def __init__(self, driver: Optional[Any] = None, database: Optional[str] = None):
         self._driver = driver
-        self._database = database or settings.NEO4J_DATABASE or "neo4j"
+        raw_db = database if database is not None else settings.NEO4J_DATABASE
+        self._database = str(raw_db).strip() if (raw_db and str(raw_db).strip()) else None
         self._constraints_verified = False
 
     def _get_driver(self) -> Any:
@@ -94,10 +95,26 @@ class Neo4jIncidentGraphRepository(IncidentGraphRepositoryInterface):
             raise RuntimeError("Neo4j driver is not configured or unavailable.")
         return driver
 
+    def _get_session(self):
+        """Create a Neo4j session respecting optional database configuration.
+
+        If self._database has a non-empty value:
+            driver.session(database=self._database)
+        If self._database is unset or empty:
+            driver.session()
+        Do not pass database=None, empty string, or 'neo4j' unless explicitly configured.
+        """
+        driver = self._get_driver()
+        if self._database:
+            return driver.session(database=self._database)
+        return driver.session()
+
     def is_available(self) -> bool:
         try:
             driver = self._get_driver()
             driver.verify_connectivity()
+            with self._get_session() as session:
+                session.run("RETURN 1 AS ping").consume()
             return True
         except Exception:
             return False
@@ -115,8 +132,7 @@ class Neo4jIncidentGraphRepository(IncidentGraphRepositoryInterface):
             f"CREATE CONSTRAINT IF NOT EXISTS FOR (f:{LABEL_FINDING}) REQUIRE f.finding_id IS UNIQUE",
         ]
 
-        driver = self._get_driver()
-        with driver.session(database=self._database) as session:
+        with self._get_session() as session:
             for statement in constraint_statements:
                 try:
                     session.run(statement)
@@ -221,7 +237,7 @@ class Neo4jIncidentGraphRepository(IncidentGraphRepositoryInterface):
         total_nodes = 1 + len(asset_params) + len(event_params) + len(evidence_params) + len(finding_params)
         total_rels = 0
 
-        with driver.session(database=self._database) as session:
+        with self._get_session() as session:
             # 1. Merge Incident Node
             session.run(
                 f"""
@@ -424,7 +440,7 @@ class Neo4jIncidentGraphRepository(IncidentGraphRepositoryInterface):
         seen_node_ids: Set[str] = set()
         seen_edge_ids: Set[str] = set()
 
-        with driver.session(database=self._database) as session:
+        with self._get_session() as session:
             res = session.run(query, {"incident_id": incident_id})
             record = res.single()
             if record:
@@ -514,7 +530,7 @@ class Neo4jIncidentGraphRepository(IncidentGraphRepositoryInterface):
           }}] AS path_rels
         """
 
-        with driver.session(database=self._database) as session:
+        with self._get_session() as session:
             res = session.run(
                 query,
                 {"source_asset": source_asset_id, "target_asset": target_asset_id},

@@ -155,6 +155,64 @@ class TestContextGraphRepository(unittest.TestCase):
         # First call is constraint creation
         self.assertIn("CREATE CONSTRAINT IF NOT EXISTS", first_call_args[0][0])
 
+    def test_neo4j_session_optional_database_default(self):
+        """Verify driver.session() is called without database parameter when database is unset or empty."""
+        mock_driver = MagicMock()
+        mock_session = MagicMock()
+        mock_driver.session.return_value.__enter__.return_value = mock_session
+
+        # Explicitly pass None as database
+        repo = Neo4jIncidentGraphRepository(driver=mock_driver, database=None)
+        with patch("backend.core.config.settings.NEO4J_DATABASE", None):
+            repo.ensure_constraints()
+
+        mock_driver.session.assert_called_with()
+        # Verify database keyword argument was NOT passed
+        call_kwargs = mock_driver.session.call_args[1]
+        self.assertNotIn("database", call_kwargs)
+
+    def test_neo4j_session_optional_database_configured(self):
+        """Verify driver.session(database=configured_database) when database is specified."""
+        mock_driver = MagicMock()
+        mock_session = MagicMock()
+        mock_driver.session.return_value.__enter__.return_value = mock_session
+
+        repo = Neo4jIncidentGraphRepository(driver=mock_driver, database="custom_auradb")
+        repo.ensure_constraints()
+
+        mock_driver.session.assert_called_with(database="custom_auradb")
+
+    def test_get_neo4j_session_helper_optional(self):
+        """Verify get_neo4j_session context manager respects optional database."""
+        from backend.graph.client import get_neo4j_session
+
+        mock_driver = MagicMock()
+        mock_session = MagicMock()
+        mock_driver.session.return_value = mock_session
+
+        with patch("backend.graph.client.get_neo4j_driver", return_value=mock_driver):
+            # 1. Unset database
+            with patch("backend.core.config.settings.NEO4J_DATABASE", None):
+                with get_neo4j_session():
+                    pass
+                mock_driver.session.assert_called_with()
+
+            mock_driver.reset_mock()
+
+            # 2. Configured database
+            with patch("backend.core.config.settings.NEO4J_DATABASE", "production_auradb"):
+                with get_neo4j_session():
+                    pass
+                mock_driver.session.assert_called_with(database="production_auradb")
+
+            mock_driver.reset_mock()
+
+            # 3. Explicit database override
+            with patch("backend.core.config.settings.NEO4J_DATABASE", None):
+                with get_neo4j_session(database="tenant_db"):
+                    pass
+                mock_driver.session.assert_called_with(database="tenant_db")
+
 
 if __name__ == "__main__":
     unittest.main()

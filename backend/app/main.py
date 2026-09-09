@@ -83,7 +83,6 @@ def database_health_check():
 def graph_health_check():
     graph_status = check_neo4j_health()
     return {
-        "service": "RETRACE Graph Subsystem",
         "graph": graph_status,
     }
 

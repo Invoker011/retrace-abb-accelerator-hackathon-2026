@@ -76,8 +76,12 @@ def get_neo4j_session(database: Optional[str] = None):
     if driver is None:
         raise RuntimeError("Neo4j driver is not available or not configured.")
 
-    target_db = database or settings.NEO4J_DATABASE or "neo4j"
-    session = driver.session(database=target_db)
+    configured_db = database if database is not None else settings.NEO4J_DATABASE
+    if configured_db and str(configured_db).strip():
+        session = driver.session(database=str(configured_db).strip())
+    else:
+        session = driver.session()
+
     try:
         yield session
     finally:
@@ -108,6 +112,8 @@ def check_neo4j_health() -> str:
 
     try:
         driver.verify_connectivity()
+        with get_neo4j_session() as session:
+            session.run("RETURN 1 AS ping").consume()
         return "connected"
     except Exception as e:
         logger.warning("[RETRACE] Neo4j health probe failed: %s", type(e).__name__)
