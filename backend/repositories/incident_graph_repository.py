@@ -215,17 +215,53 @@ class Neo4jIncidentGraphRepository(IncidentGraphRepositoryInterface):
             fid = f.get("id") or f.get("finding_id")
             if not fid:
                 continue
+            classification = f.get("category") or f.get("classification")
+            if hasattr(classification, "value"):
+                classification = classification.value
+            if not classification:
+                classification = "OBSERVED"
+            classification_str = str(classification).upper()
+
+            statement = f.get("statement") or f.get("title") or ""
+            conf_val = f.get("confidenceScore") or f.get("confidence_score")
+            try:
+                conf_score = float(conf_val) if conf_val is not None else 1.0
+            except (ValueError, TypeError):
+                conf_score = 1.0
+
             finding_params.append({
                 "finding_id": fid,
-                "classification": f.get("classification", "OBSERVED"),
-                "statement": f.get("statement", ""),
-                "confidence_score": float(f.get("confidenceScore") or f.get("confidence_score", 1.0)),
+                "classification": classification_str,
+                "category": classification_str,
+                "statement": statement,
+                "confidence_score": conf_score,
             })
-            for evid in f.get("evidenceIds") or f.get("evidence_ids") or []:
-                finding_evidence_links.append({"finding_id": fid, "evidence_id": evid})
-            related_asset = f.get("assetId") or f.get("asset_id")
-            if related_asset:
-                finding_asset_links.append({"finding_id": fid, "asset_id": related_asset})
+
+            ev_list = (
+                f.get("supportingEvidenceIds")
+                or f.get("supporting_evidence_ids")
+                or f.get("evidenceIds")
+                or f.get("evidence_ids")
+                or []
+            )
+            for evid in ev_list:
+                if evid:
+                    finding_evidence_links.append({"finding_id": fid, "evidence_id": str(evid)})
+
+            asset_list = (
+                f.get("relatedAssetIds")
+                or f.get("related_asset_ids")
+                or []
+            )
+            if not isinstance(asset_list, list):
+                asset_list = [asset_list]
+            if f.get("assetId"):
+                asset_list.append(f.get("assetId"))
+            if f.get("asset_id"):
+                asset_list.append(f.get("asset_id"))
+            for aid in asset_list:
+                if aid:
+                    finding_asset_links.append({"finding_id": fid, "asset_id": str(aid)})
 
         # Explicit Asset Topology couplings
         topology_couplings = [
@@ -237,7 +273,80 @@ class Neo4jIncidentGraphRepository(IncidentGraphRepositoryInterface):
         total_nodes = 1 + len(asset_params) + len(event_params) + len(evidence_params) + len(finding_params)
         total_rels = 0
 
+        event_ids = [e["event_id"] for e in event_params]
+        evidence_ids = [ev["evidence_id"] for ev in evidence_params]
+        finding_ids = [f["finding_id"] for f in finding_params]
+
         with self._get_session() as session:
+            # 0. RECONCILIATION OF STALE / INCORRECT RETRACE RELATIONSHIPS
+            # R1: Delete any invalid HAS_EVIDENCE pointing to non-Evidence nodes (e.g. Assets)
+            session.run(
+                f"""
+                MATCH (i:{LABEL_INCIDENT} {{incident_id: $incident_id}})-[r:{REL_HAS_EVIDENCE}]->(target)
+                WHERE NOT target:{LABEL_EVIDENCE}
+                DELETE r
+                """,
+                {"incident_id": incident_id},
+            )
+
+            # R2: Delete invalid RELATED_TO relationships where source is not Evidence or target is not Asset (e.g. Asset self-loops)
+            session.run(
+                f"""
+                MATCH (src)-[r:{REL_RELATED_TO}]->(tgt)
+                WHERE NOT src:{LABEL_EVIDENCE} OR NOT tgt:{LABEL_ASSET}
+                DELETE r
+                """
+            )
+
+            # R3: Delete any direct Asset->RELATED_TO relationships
+            session.run(
+                f"""
+                MATCH (a:{LABEL_ASSET})-[r:{REL_RELATED_TO}]->()
+                DELETE r
+                """
+            )
+
+            # R4: Clean existing incident-managed relationships for this incident to ensure full idempotency
+            session.run(
+                f"""
+                MATCH (i:{LABEL_INCIDENT} {{incident_id: $incident_id}})-[r:{REL_INVOLVES}|{REL_HAS_EVENT}|{REL_HAS_EVIDENCE}|{REL_HAS_FINDING}]->()
+                DELETE r
+                """,
+                {"incident_id": incident_id},
+            )
+
+            if event_ids:
+                session.run(
+                    f"""
+                    UNWIND $event_ids AS eid
+                    WITH eid WHERE eid IS NOT NULL AND eid <> ''
+                    MATCH (e:{LABEL_EVENT} {{event_id: eid}})-[r:{REL_OCCURRED_ON}|{REL_SUPPORTED_BY}]->()
+                    DELETE r
+                    """,
+                    {"event_ids": event_ids},
+                )
+
+            if evidence_ids:
+                session.run(
+                    f"""
+                    UNWIND $evidence_ids AS evid
+                    WITH evid WHERE evid IS NOT NULL AND evid <> ''
+                    MATCH (ev:{LABEL_EVIDENCE} {{evidence_id: evid}})-[r:{REL_RELATED_TO}]->()
+                    DELETE r
+                    """,
+                    {"evidence_ids": evidence_ids},
+                )
+
+            if finding_ids:
+                session.run(
+                    f"""
+                    UNWIND $finding_ids AS fid
+                    WITH fid WHERE fid IS NOT NULL AND fid <> ''
+                    MATCH (f:{LABEL_FINDING} {{finding_id: fid}})-[r:{REL_SUPPORTED_BY}|{REL_RELATES_TO}]->()
+                    DELETE r
+                    """,
+                    {"finding_ids": finding_ids},
+                )
             # 1. Merge Incident Node
             session.run(
                 f"""
@@ -353,11 +462,15 @@ class Neo4jIncidentGraphRepository(IncidentGraphRepositoryInterface):
                     WHERE ev.evidence_id IS NOT NULL AND ev.evidence_id <> ''
                     MERGE (evidence:{LABEL_EVIDENCE} {{evidence_id: ev.evidence_id}})
                     ON CREATE SET
+                      evidence.id = ev.evidence_id,
+                      evidence.evidence_id = ev.evidence_id,
                       evidence.source_type = ev.source_type,
                       evidence.filename = ev.filename,
                       evidence.processing_status = ev.processing_status,
                       evidence.asset_id = ev.asset_id
                     ON MATCH SET
+                      evidence.id = ev.evidence_id,
+                      evidence.evidence_id = ev.evidence_id,
                       evidence.source_type = ev.source_type,
                       evidence.filename = ev.filename,
                       evidence.processing_status = ev.processing_status,
@@ -394,11 +507,17 @@ class Neo4jIncidentGraphRepository(IncidentGraphRepositoryInterface):
                     WHERE f.finding_id IS NOT NULL AND f.finding_id <> ''
                     MERGE (finding:{LABEL_FINDING} {{finding_id: f.finding_id}})
                     ON CREATE SET
+                      finding.id = f.finding_id,
+                      finding.finding_id = f.finding_id,
                       finding.classification = f.classification,
+                      finding.category = f.category,
                       finding.statement = f.statement,
                       finding.confidence_score = f.confidence_score
                     ON MATCH SET
+                      finding.id = f.finding_id,
+                      finding.finding_id = f.finding_id,
                       finding.classification = f.classification,
+                      finding.category = f.category,
                       finding.statement = f.statement,
                       finding.confidence_score = f.confidence_score
                     WITH finding
@@ -480,8 +599,12 @@ class Neo4jIncidentGraphRepository(IncidentGraphRepositoryInterface):
         driver = self._get_driver()
         query = f"""
         MATCH (i:{LABEL_INCIDENT} {{incident_id: $incident_id}})
-        OPTIONAL MATCH (i)-[r1]-(n)
-        WITH i, collect(DISTINCT n) + [i] AS all_nodes
+        OPTIONAL MATCH (i)-[r1]-(n1)
+        OPTIONAL MATCH (n1)-[r2]-(n2)
+        WHERE n2:{LABEL_ASSET} OR n2:{LABEL_EVENT} OR n2:{LABEL_EVIDENCE} OR n2:{LABEL_FINDING}
+        WITH i, [x IN collect(DISTINCT n1) + collect(DISTINCT n2) + [i] WHERE x IS NOT NULL] AS raw_nodes
+        UNWIND raw_nodes AS node
+        WITH i, collect(DISTINCT node) AS all_nodes
         UNWIND all_nodes AS src
         UNWIND all_nodes AS tgt
         OPTIONAL MATCH (src)-[rel]->(tgt)
@@ -493,6 +616,28 @@ class Neo4jIncidentGraphRepository(IncidentGraphRepositoryInterface):
         seen_node_ids: Set[str] = set()
         seen_edge_ids: Set[str] = set()
 
+        def resolve_node_id(n_obj: Any) -> Optional[str]:
+            n_labels = list(getattr(n_obj, "labels", []))
+            n_props = dict(n_obj)
+            if LABEL_EVIDENCE in n_labels:
+                return n_props.get("evidence_id") or n_props.get("id")
+            if LABEL_FINDING in n_labels:
+                return n_props.get("finding_id") or n_props.get("id")
+            if LABEL_EVENT in n_labels:
+                return n_props.get("event_id") or n_props.get("id")
+            if LABEL_ASSET in n_labels:
+                return n_props.get("asset_id") or n_props.get("id")
+            if LABEL_INCIDENT in n_labels:
+                return n_props.get("incident_id") or n_props.get("id")
+            return (
+                n_props.get("evidence_id")
+                or n_props.get("finding_id")
+                or n_props.get("event_id")
+                or n_props.get("incident_id")
+                or n_props.get("asset_id")
+                or (str(getattr(n_obj, "id", "")) if hasattr(n_obj, "id") else None)
+            )
+
         with self._get_session() as session:
             res = session.run(query, {"incident_id": incident_id})
             record = res.single()
@@ -501,20 +646,36 @@ class Neo4jIncidentGraphRepository(IncidentGraphRepositoryInterface):
                 raw_rels = record.get("all_rels") or []
 
                 for node in raw_nodes:
-                    labels = list(node.labels)
+                    labels = list(getattr(node, "labels", []))
                     primary_label = labels[0] if labels else "Unknown"
                     props = dict(node)
-                    node_id = (
-                        props.get("incident_id")
-                        or props.get("asset_id")
-                        or props.get("event_id")
-                        or props.get("evidence_id")
-                        or props.get("finding_id")
-                        or str(node.id)
-                    )
+                    node_id = resolve_node_id(node)
+                    if not node_id:
+                        continue
                     if node_id not in seen_node_ids:
                         seen_node_ids.add(node_id)
-                        label_name = props.get("title") or props.get("name") or props.get("filename") or node_id
+                        if LABEL_EVIDENCE in labels:
+                            label_name = props.get("filename") or props.get("original_filename") or props.get("title") or node_id
+                            props["id"] = node_id
+                            props["evidence_id"] = node_id
+                        elif LABEL_FINDING in labels:
+                            label_name = props.get("statement") or props.get("title") or node_id
+                            props["id"] = node_id
+                            props["finding_id"] = node_id
+                            props["classification"] = props.get("classification") or props.get("category") or "OBSERVED"
+                            props["category"] = props["classification"]
+                        elif LABEL_EVENT in labels:
+                            label_name = props.get("title") or props.get("name") or node_id
+                            props["id"] = node_id
+                            props["event_id"] = node_id
+                        elif LABEL_ASSET in labels:
+                            label_name = props.get("name") or props.get("title") or node_id
+                            props["id"] = node_id
+                            props["asset_id"] = node_id
+                        else:
+                            label_name = props.get("title") or props.get("name") or node_id
+                            props["id"] = node_id
+
                         nodes_out.append({
                             "id": node_id,
                             "type": primary_label.lower(),
@@ -523,24 +684,13 @@ class Neo4jIncidentGraphRepository(IncidentGraphRepositoryInterface):
                         })
 
                 for rel in raw_rels:
-                    start_props = dict(rel.start_node)
-                    end_props = dict(rel.end_node)
-                    source_id = (
-                        start_props.get("incident_id")
-                        or start_props.get("asset_id")
-                        or start_props.get("event_id")
-                        or start_props.get("evidence_id")
-                        or start_props.get("finding_id")
-                        or str(rel.start_node.id)
-                    )
-                    target_id = (
-                        end_props.get("incident_id")
-                        or end_props.get("asset_id")
-                        or end_props.get("event_id")
-                        or end_props.get("evidence_id")
-                        or end_props.get("finding_id")
-                        or str(rel.end_node.id)
-                    )
+                    source_id = resolve_node_id(rel.start_node)
+                    target_id = resolve_node_id(rel.end_node)
+                    if not source_id or not target_id:
+                        continue
+                    # Prevent any self-loop on RELATED_TO
+                    if rel.type == REL_RELATED_TO and source_id == target_id:
+                        continue
                     edge_id = f"{source_id}->{rel.type}->{target_id}"
                     if edge_id not in seen_edge_ids:
                         seen_edge_ids.add(edge_id)
@@ -645,6 +795,11 @@ class InMemoryIncidentGraphRepository(IncidentGraphRepositoryInterface):
         findings: List[Dict[str, Any]],
         relationships: List[Dict[str, Any]],
     ) -> Dict[str, Any]:
+        # Reset state for idempotent resynchronization
+        self._nodes.clear()
+        self._edges.clear()
+        self._adj.clear()
+
         inc_id = incident.get("id") or incident.get("incident_id", "INC-2026-001")
 
         # Incident Node
@@ -714,18 +869,43 @@ class InMemoryIncidentGraphRepository(IncidentGraphRepositoryInterface):
         for f in findings:
             fid = f.get("id") or f.get("finding_id")
             if fid:
+                classification = f.get("category") or f.get("classification")
+                if hasattr(classification, "value"):
+                    classification = classification.value
+                if not classification:
+                    classification = "OBSERVED"
+                classification_str = str(classification).upper()
+                f_meta = dict(f)
+                f_meta["classification"] = classification_str
+                f_meta["category"] = classification_str
+                f_meta["id"] = fid
+                f_meta["finding_id"] = fid
                 self._nodes[fid] = {
                     "id": fid,
                     "type": "finding",
                     "label": f.get("statement") or fid,
-                    "metadata": f,
+                    "metadata": f_meta,
                 }
                 self._add_edge(inc_id, fid, REL_HAS_FINDING)
-                for evid in f.get("evidenceIds") or f.get("evidence_ids") or []:
-                    self._add_edge(fid, evid, REL_SUPPORTED_BY)
-                aid = f.get("assetId") or f.get("asset_id")
-                if aid and aid in self._nodes:
-                    self._add_edge(fid, aid, REL_RELATES_TO)
+                for evid in (
+                    f.get("supportingEvidenceIds")
+                    or f.get("supporting_evidence_ids")
+                    or f.get("evidenceIds")
+                    or f.get("evidence_ids")
+                    or []
+                ):
+                    if evid:
+                        self._add_edge(fid, str(evid), REL_SUPPORTED_BY)
+                asset_list = f.get("relatedAssetIds") or f.get("related_asset_ids") or []
+                if not isinstance(asset_list, list):
+                    asset_list = [asset_list]
+                if f.get("assetId"):
+                    asset_list.append(f.get("assetId"))
+                if f.get("asset_id"):
+                    asset_list.append(f.get("asset_id"))
+                for aid in asset_list:
+                    if aid and aid in self._nodes:
+                        self._add_edge(fid, aid, REL_RELATES_TO)
 
         return {
             "incident_id": inc_id,
@@ -762,7 +942,11 @@ class InMemoryIncidentGraphRepository(IncidentGraphRepositoryInterface):
 
     def _seed_default_mock(self, incident_id: str):
         """Initial baseline seed if not synced."""
-        self._nodes[incident_id] = {"id": incident_id, "type": "incident", "label": incident_id, "metadata": {}}
+        self._nodes.clear()
+        self._edges.clear()
+        self._adj.clear()
+
+        self._nodes[incident_id] = {"id": incident_id, "type": "incident", "label": incident_id, "metadata": {"incident_id": incident_id}}
         assets = ["VFD-204", "M-204", "P-204", "PLC-204"]
         for a in assets:
             self._nodes[a] = {"id": a, "type": "asset", "label": a, "metadata": {"asset_id": a}}
@@ -773,7 +957,7 @@ class InMemoryIncidentGraphRepository(IncidentGraphRepositoryInterface):
 
         for i in range(1, 7):
             evid = f"EVD-00{i}"
-            self._nodes[evid] = {"id": evid, "type": "evidence", "label": f"Evidence {evid}", "metadata": {}}
+            self._nodes[evid] = {"id": evid, "type": "evidence", "label": f"Evidence {evid}", "metadata": {"evidence_id": evid, "asset_id": "VFD-204" if i == 1 else "M-204" if i == 5 else "PLC-204" if i == 2 else "P-204"}}
             self._add_edge(incident_id, evid, REL_HAS_EVIDENCE)
 
         # Baseline linkage
@@ -783,6 +967,27 @@ class InMemoryIncidentGraphRepository(IncidentGraphRepositoryInterface):
         self._add_edge("EVD-004", "P-204", REL_RELATED_TO)
         self._add_edge("EVD-006", "P-204", REL_RELATED_TO)
         self._add_edge("EVD-002", "PLC-204", REL_RELATED_TO)
+
+        # Baseline findings with classifications
+        mock_findings = [
+            ("FND-001", "OBSERVED", "VFD-204 Phase U IGBT over-temperature trip logged at 14:22:18", ["EVD-001"], ["VFD-204"]),
+            ("FND-002", "OBSERVED", "Line 2 slurry pump discharge pressure drop to 0.4 bar", ["EVD-002"], ["P-204"]),
+            ("FND-003", "CORRELATED", "VFD cabinet inlet filter DP increased 3 days prior", ["EVD-004"], ["VFD-204"]),
+            ("FND-004", "HYPOTHESIS", "Cooling fan auxiliary contact intermittent failure", ["EVD-006"], ["VFD-204"]),
+            ("FND-005", "UNKNOWN", "Whether emergency pump P-204B auto-started", [], ["P-204"]),
+        ]
+        for fid, cls, stmt, ev_ids, asset_ids in mock_findings:
+            self._nodes[fid] = {
+                "id": fid,
+                "type": "finding",
+                "label": stmt,
+                "metadata": {"finding_id": fid, "classification": cls, "category": cls, "statement": stmt},
+            }
+            self._add_edge(incident_id, fid, REL_HAS_FINDING)
+            for eid in ev_ids:
+                self._add_edge(fid, eid, REL_SUPPORTED_BY)
+            for aid in asset_ids:
+                self._add_edge(fid, aid, REL_RELATES_TO)
 
     def find_asset_path(
         self, incident_id: str, source_asset_id: str, target_asset_id: str

@@ -71,6 +71,7 @@ class ContextGraphService:
 
         for upl in uploaded_records:
             upl_dict = upl.model_dump() if hasattr(upl, "model_dump") else upl.dict() if hasattr(upl, "dict") else dict(upl)
+            target_asset = upl_dict.get("asset_id") or upl_dict.get("assetId") or "VFD-204"
             evidence_dicts.append({
                 "id": upl_dict.get("evidence_id"),
                 "evidence_id": upl_dict.get("evidence_id"),
@@ -80,9 +81,18 @@ class ContextGraphService:
                 "original_filename": upl_dict.get("original_filename"),
                 "processingStatus": upl_dict.get("processing_status", "UPLOADED"),
                 "processing_status": upl_dict.get("processing_status", "UPLOADED"),
-                "assetId": upl_dict.get("asset_id"),
-                "asset_id": upl_dict.get("asset_id"),
+                "assetId": target_asset,
+                "asset_id": target_asset,
             })
+
+        # Deduplicate evidence by ID
+        seen_ev_ids = set()
+        deduped_evidence: List[Dict[str, Any]] = []
+        for ev in evidence_dicts:
+            eid = ev.get("id") or ev.get("evidence_id")
+            if eid and eid not in seen_ev_ids:
+                seen_ev_ids.add(eid)
+                deduped_evidence.append(ev)
 
         # Convert schemas to dicts
         inc_dict = incident.model_dump() if hasattr(incident, "model_dump") else incident.dict()
@@ -96,7 +106,7 @@ class ContextGraphService:
                 incident=inc_dict,
                 assets=asset_dicts,
                 events=event_dicts,
-                evidence=evidence_dicts,
+                evidence=deduped_evidence,
                 findings=finding_dicts,
                 relationships=rel_dicts,
             )
