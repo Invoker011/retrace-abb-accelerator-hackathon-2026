@@ -568,6 +568,111 @@ class TestQdrantVectorRetrieval(unittest.TestCase):
             bad_res = self.client.post("/api/incidents/INC-UNKNOWN/vectors/sync")
             self.assertEqual(bad_res.status_code, 404)
 
+    # 21. Error message sanitization masks secrets and truncates
+    def test_21_error_message_sanitization(self):
+        from backend.vector.embedding import _sanitize_error_message
+
+        # Redacts Bearer token
+        msg1 = "HTTP 401: Unauthorized request with Bearer ya29.a0ARrdaM8x9secretTokenValue"
+        sanitized1 = _sanitize_error_message(msg1)
+        self.assertNotIn("ya29.a0ARrdaM8x9secretTokenValue", sanitized1)
+        self.assertIn("Bearer [REDACTED]", sanitized1)
+
+        # Redacts key parameter
+        msg2 = "API key invalid: key=AIzaSyD-SecretApiKey12345 in URL"
+        sanitized2 = _sanitize_error_message(msg2)
+        self.assertNotIn("AIzaSyD-SecretApiKey12345", sanitized2)
+        self.assertIn("key=[REDACTED]", sanitized2)
+
+        # Truncates overly long messages
+        msg3 = "Error detail: " + ("X" * 500)
+        sanitized3 = _sanitize_error_message(msg3)
+        self.assertLessEqual(len(sanitized3), 325)
+        self.assertTrue(sanitized3.endswith("[truncated]"))
+
+    # 22. GeminiEmbeddingProvider initialization and config propagation
+    def test_22_gemini_embedding_provider_initialization(self):
+        provider = GeminiEmbeddingProvider(
+            project="retrace-abb-2026",
+            location="us-central1",
+            model="gemini-embedding-2",
+            dimension=768,
+        )
+        self.assertEqual(provider.project, "retrace-abb-2026")
+        self.assertEqual(provider.location, "us-central1")
+        self.assertEqual(provider.model, "gemini-embedding-2")
+        self.assertEqual(provider.dimension, 768)
+
+    # 23. GeminiEmbeddingProvider embeds each chunk individually with correct API structure
+    def test_23_gemini_embedding_provider_individual_embed_calls(self):
+        provider = GeminiEmbeddingProvider(
+            project="retrace-abb-2026",
+            location="us-central1",
+            model="gemini-embedding-2",
+            dimension=768,
+        )
+
+        mock_client = MagicMock()
+        # Mock embed_content returning 768-dim mock vector
+        mock_resp1 = MagicMock()
+        mock_resp1.embedding.values = [0.05] * 768
+        mock_resp2 = MagicMock()
+        mock_resp2.embedding.values = [0.08] * 768
+
+        mock_client.models.embed_content.side_effect = [mock_resp1, mock_resp2]
+        provider._client = mock_client
+
+        chunks = ["Pump vibration alert 9.2 mm/s", "Cavitation noise reported at P-204"]
+        embeddings = provider.embed_texts(chunks)
+
+        self.assertEqual(len(embeddings), 2)
+        self.assertEqual(len(embeddings[0]), 768)
+        self.assertEqual(len(embeddings[1]), 768)
+        # Verify embed_content was called individually per chunk (not passing a multi-string list)
+        self.assertEqual(mock_client.models.embed_content.call_count, 2)
+        for call_args in mock_client.models.embed_content.call_args_list:
+            kwargs = call_args.kwargs
+            self.assertEqual(kwargs["model"], "gemini-embedding-2")
+            self.assertIsInstance(kwargs["contents"], str)
+            self.assertIn("output_dimensionality", str(kwargs.get("config")))
+
+    # 24. GeminiEmbeddingProvider safe diagnostic logging on ClientError
+    def test_24_gemini_embedding_provider_safe_client_error_logging(self):
+        provider = GeminiEmbeddingProvider(
+            project="retrace-abb-2026",
+            location="us-central1",
+            model="gemini-embedding-2",
+            dimension=768,
+        )
+
+        class MockClientError(Exception):
+            code = 400
+            message = "Publisher Model projects/retrace-abb-2026/locations/us-central1/publishers/google/models/gemini-embedding-2 not found"
+
+        mock_client = MagicMock()
+        mock_client.models.embed_content.side_effect = MockClientError("ClientError occurred")
+        mock_client.models.embed_content.side_effect.code = 400
+        mock_client.models.embed_content.side_effect.message = "ClientError invalid argument"
+        provider._client = mock_client
+
+        with self.assertLogs("retrace.vector", level="ERROR") as log_cm:
+            with self.assertRaises(EmbeddingProviderError) as ctx:
+                provider.embed_texts(["Test chunk evidence content"])
+
+            self.assertEqual(ctx.exception.status_code, 503)
+            self.assertIn("Failed to generate evidence embeddings via Vertex AI", ctx.exception.message)
+            # Public message must not leak internal stack traces or evidence content
+            self.assertNotIn("Test chunk evidence content", ctx.exception.message)
+
+            # Check safe diagnostic log
+            log_output = "\n".join(log_cm.output)
+            self.assertIn("status_code=400", log_output)
+            self.assertIn("model='gemini-embedding-2'", log_output)
+            self.assertIn("location='us-central1'", log_output)
+            self.assertIn("dimension=768", log_output)
+            # Must NEVER log evidence content
+            self.assertNotIn("Test chunk evidence content", log_output)
+
 
 if __name__ == "__main__":
     unittest.main()

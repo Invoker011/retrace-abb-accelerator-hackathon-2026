@@ -58,9 +58,17 @@ class Settings:
     QDRANT_VECTOR_SIZE: int = int(os.getenv("QDRANT_VECTOR_SIZE", "768"))
 
     # Vertex AI Multimodal Embedding Settings
-    GOOGLE_CLOUD_PROJECT: str = os.getenv("GOOGLE_CLOUD_PROJECT", "retrace-abb-2026")
-    GOOGLE_CLOUD_LOCATION: str = os.getenv("GOOGLE_CLOUD_LOCATION", "global")
-    EMBEDDING_MODEL: str = os.getenv("EMBEDDING_MODEL", "gemini-embedding-2")
+    GOOGLE_CLOUD_PROJECT: str = (
+        os.getenv("GOOGLE_CLOUD_PROJECT", "").strip()
+        or os.getenv("GCP_PROJECT", "").strip()
+        or "retrace-abb-2026"
+    )
+    GOOGLE_CLOUD_LOCATION: str = (
+        os.getenv("GOOGLE_CLOUD_LOCATION", "").strip()
+        or os.getenv("GOOGLE_CLOUD_REGION", "").strip()
+        or "global"
+    )
+    EMBEDDING_MODEL: str = os.getenv("EMBEDDING_MODEL", "").strip() or "gemini-embedding-2"
     EMBEDDING_DIMENSION: int = int(os.getenv("EMBEDDING_DIMENSION", "768"))
 
 settings = Settings()

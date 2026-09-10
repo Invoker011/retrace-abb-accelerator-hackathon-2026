@@ -500,7 +500,7 @@ export const ContextGraphView: React.FC<ContextGraphViewProps> = ({
                       cy={node.y}
                       r={r + 8}
                       fill="none"
-                      stroke={node.borderColor}
+                      stroke={node.borderColor || '#38bdf8'}
                       strokeWidth="2"
                       strokeDasharray="4 2"
                       className="animate-spin"
@@ -513,8 +513,8 @@ export const ContextGraphView: React.FC<ContextGraphViewProps> = ({
                     cx={node.x}
                     cy={node.y}
                     r={r}
-                    fill={node.color}
-                    stroke={node.borderColor}
+                    fill={node.color || (node.type === 'asset' ? '#1e1b4b' : node.type === 'evidence' ? '#082f49' : '#0f172a')}
+                    stroke={node.borderColor || '#38bdf8'}
                     strokeWidth={isSelected ? 3 : 1.8}
                     className="group-hover:scale-105 transition-transform"
                   />
@@ -616,7 +616,15 @@ export const ContextGraphView: React.FC<ContextGraphViewProps> = ({
                   <div>
                     <span className="text-slate-500 block text-[10px] uppercase">Evidence Category</span>
                     <div className="mt-1">
-                      <EvidenceBadge category={activeNode.data.sourceType} size="sm" />
+                      <EvidenceBadge
+                        category={
+                          activeNode.data.sourceType ||
+                          activeNode.data.source_type ||
+                          activeNode.data.category ||
+                          'Industrial Evidence'
+                        }
+                        size="sm"
+                      />
                     </div>
                   </div>
                   <div>

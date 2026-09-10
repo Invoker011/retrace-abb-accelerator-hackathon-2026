@@ -18,14 +18,34 @@ logger = logging.getLogger("retrace.vector")
 try:
     from google import genai
     from google.genai import types as genai_types
+    from google.genai.errors import APIError, ClientError
     HAS_GENAI = True
 except ImportError:
     HAS_GENAI = False
     genai = None  # type: ignore
     genai_types = None  # type: ignore
+    APIError = Exception  # type: ignore
+    ClientError = Exception  # type: ignore
 
 DOCUMENT_INSTRUCTION = "Represent this industrial maintenance evidence for semantic retrieval."
 QUERY_INSTRUCTION = "Represent this industrial maintenance troubleshooting question for retrieving relevant evidence."
+
+
+def _sanitize_error_message(msg: Any) -> str:
+    """Sanitize error message to prevent leaking secrets, credentials, or evidence text."""
+    if not msg:
+        return "No error details provided"
+    import re
+    cleaned = str(msg).strip().replace("\n", " ").replace("\r", " ")
+    # Redact credentials, tokens, and authorization values
+    cleaned = re.sub(r"(Bearer\s+)[A-Za-z0-9_\-\.]+", r"\1[REDACTED]", cleaned, flags=re.IGNORECASE)
+    cleaned = re.sub(r"(key[=:]\s*)[A-Za-z0-9_\-]+", r"\1[REDACTED]", cleaned, flags=re.IGNORECASE)
+    cleaned = re.sub(r"(token[=:]\s*)[A-Za-z0-9_\-]+", r"\1[REDACTED]", cleaned, flags=re.IGNORECASE)
+    cleaned = re.sub(r"(password[=:]\s*)[^\s,]+", r"\1[REDACTED]", cleaned, flags=re.IGNORECASE)
+    # Truncate to safe length to avoid leaking full body payloads
+    if len(cleaned) > 300:
+        cleaned = cleaned[:300] + "... [truncated]"
+    return cleaned
 
 
 class EmbeddingProviderError(Exception):
@@ -87,7 +107,16 @@ class GeminiEmbeddingProvider(EmbeddingProvider):
             )
             return self._client
         except Exception as e:
-            logger.warning("[RETRACE] Failed to initialize Vertex AI genai client: %s", type(e).__name__)
+            status_code = getattr(e, "code", None) or getattr(e, "status_code", None)
+            raw_msg = getattr(e, "message", None) or str(e)
+            sanitized_msg = _sanitize_error_message(raw_msg)
+            logger.error(
+                "[RETRACE] Vertex AI client initialization error: status_code=%s, error_message='%s', project='%s', location='%s'",
+                status_code,
+                sanitized_msg,
+                self.project,
+                self.location,
+            )
             raise EmbeddingProviderError(
                 f"Vertex AI embedding provider initialization failed: {type(e).__name__}"
             )
@@ -100,44 +129,50 @@ class GeminiEmbeddingProvider(EmbeddingProvider):
         inst = instruction or DOCUMENT_INSTRUCTION
         embeddings: List[List[float]] = []
 
-        # Process in batches of 16 to respect service limits
-        batch_size = 16
-        for i in range(0, len(texts), batch_size):
-            batch = texts[i : i + batch_size]
+        # Embed each chunk individually to ensure 1:1 chunk-to-embedding mapping
+        # and prevent gemini-embedding-2 from treating a list of strings as one multi-part Content
+        for text in texts:
+            formatted_text = f"{inst}\n{text}" if inst else text
             try:
-                # Format texts with instruction prefix if requested
-                formatted_batch = [f"{inst}\n{t}" if inst else t for t in batch]
-                
-                config_kwargs = {}
                 if genai_types and hasattr(genai_types, "EmbedContentConfig"):
                     config = genai_types.EmbedContentConfig(
                         output_dimensionality=self.dimension,
                     )
-                    config_kwargs["config"] = config
                 else:
-                    config_kwargs["config"] = {"output_dimensionality": self.dimension}
+                    config = {"output_dimensionality": self.dimension}
 
                 response = client.models.embed_content(
                     model=self.model,
-                    contents=formatted_batch,
-                    **config_kwargs,
+                    contents=formatted_text,
+                    config=config,
                 )
 
                 # Extract embedding values
-                if hasattr(response, "embeddings") and response.embeddings:
-                    for emb in response.embeddings:
-                        values = getattr(emb, "values", None)
-                        if values is None and isinstance(emb, list):
-                            values = emb
-                        embeddings.append(list(values or []))
-                elif hasattr(response, "embedding") and response.embedding:
-                    values = getattr(response.embedding, "values", None)
-                    embeddings.append(list(values or []))
-                else:
-                    raise ValueError("Unexpected response format from embedding model")
+                values = None
+                if hasattr(response, "embedding") and response.embedding:
+                    values = getattr(response.embedding, "values", response.embedding)
+                elif hasattr(response, "embeddings") and response.embeddings:
+                    first = response.embeddings[0]
+                    values = getattr(first, "values", first)
+
+                if values is None:
+                    raise ValueError("Unexpected response format: no embedding values returned from model")
+
+                embeddings.append(list(values))
 
             except Exception as e:
-                logger.error("[RETRACE] Vertex AI text embedding error: %s", type(e).__name__)
+                status_code = getattr(e, "code", None) or getattr(e, "status_code", None)
+                raw_msg = getattr(e, "message", None) or str(e)
+                sanitized_msg = _sanitize_error_message(raw_msg)
+
+                logger.error(
+                    "[RETRACE] Vertex AI text embedding ClientError: status_code=%s, error_message='%s', model='%s', location='%s', dimension=%d",
+                    status_code,
+                    sanitized_msg,
+                    self.model,
+                    self.location,
+                    self.dimension,
+                )
                 raise EmbeddingProviderError(
                     f"Failed to generate evidence embeddings via Vertex AI: {type(e).__name__}"
                 )
