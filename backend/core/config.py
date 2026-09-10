@@ -51,4 +51,16 @@ class Settings:
         os.getenv("NEO4J_DATABASE", "").strip() or None
     )
 
+    # Qdrant Vector Database (Server-side only, optional at config parse time)
+    QDRANT_URL: Optional[str] = (os.getenv("QDRANT_URL", "").strip() or None)
+    QDRANT_API_KEY: Optional[str] = (os.getenv("QDRANT_API_KEY", "").strip() or None)
+    QDRANT_COLLECTION: str = os.getenv("QDRANT_COLLECTION", "retrace_evidence_v1")
+    QDRANT_VECTOR_SIZE: int = int(os.getenv("QDRANT_VECTOR_SIZE", "768"))
+
+    # Vertex AI Multimodal Embedding Settings
+    GOOGLE_CLOUD_PROJECT: str = os.getenv("GOOGLE_CLOUD_PROJECT", "retrace-abb-2026")
+    GOOGLE_CLOUD_LOCATION: str = os.getenv("GOOGLE_CLOUD_LOCATION", "global")
+    EMBEDDING_MODEL: str = os.getenv("EMBEDDING_MODEL", "gemini-embedding-2")
+    EMBEDDING_DIMENSION: int = int(os.getenv("EMBEDDING_DIMENSION", "768"))
+
 settings = Settings()

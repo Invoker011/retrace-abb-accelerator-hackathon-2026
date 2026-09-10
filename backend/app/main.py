@@ -21,6 +21,7 @@ from backend.core.config import settings
 from backend.api import api_router
 from backend.database.session import check_database_health
 from backend.graph.client import check_neo4j_health, close_neo4j_driver
+from backend.vector.client import check_qdrant_health, close_qdrant_client
 
 app = FastAPI(
     title=settings.PROJECT_NAME,
@@ -64,11 +65,13 @@ def root():
 def health_check():
     db_status = check_database_health()
     graph_status = check_neo4j_health()
+    vector_health = check_qdrant_health()
     return {
         "status": "healthy",
         "service": "RETRACE API",
         "database": db_status,
         "graph": graph_status,
+        "vector": vector_health.get("vector", "unknown"),
     }
 
 @app.get("/health/database", tags=["Health"])
@@ -86,9 +89,14 @@ def graph_health_check():
         "graph": graph_status,
     }
 
+@app.get("/health/vector", tags=["Health"])
+def vector_health_check():
+    return check_qdrant_health()
+
 @app.on_event("shutdown")
 def shutdown_event():
     close_neo4j_driver()
+    close_qdrant_client()
 
 # Mount the modular API router under /api
 app.include_router(api_router, prefix=settings.API_PREFIX)

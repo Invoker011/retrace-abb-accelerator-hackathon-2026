@@ -12,6 +12,12 @@ from backend.schemas.prevention import PreventionScenario
 from backend.schemas.context import IncidentContextResponse
 from backend.graph.models import GraphResponse, GraphSyncResponse, AssetPathResponse
 from backend.services.context_graph_service import context_graph_service, ContextGraphError
+from backend.vector.models import (
+    SemanticSearchRequest,
+    SemanticSearchResponse,
+    VectorSyncResponse,
+)
+from backend.vector.service import get_vector_index_service, VectorServiceError
 
 router = APIRouter(prefix="/incidents", tags=["Incidents"])
 
@@ -221,4 +227,54 @@ def get_incident_graph_path(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to discover asset relationship path.",
         )
+
+
+@router.post(
+    "/{incident_id}/search/semantic",
+    response_model=SemanticSearchResponse,
+    summary="Semantic similarity search across incident evidence",
+)
+def semantic_search_evidence(
+    incident_id: str,
+    payload: SemanticSearchRequest,
+) -> SemanticSearchResponse:
+    """Perform incident-scoped semantic similarity retrieval across evidence chunks."""
+    try:
+        service = get_vector_index_service()
+        res = service.semantic_search(
+            incident_id=incident_id,
+            query=payload.query,
+            top_k=payload.top_k,
+            asset_id=payload.asset_id,
+            source_type=payload.source_type,
+        )
+        return SemanticSearchResponse(**res)
+    except VectorServiceError as e:
+        raise HTTPException(status_code=e.status_code, detail=e.message)
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to execute semantic evidence retrieval.",
+        )
+
+
+@router.post(
+    "/{incident_id}/vectors/sync",
+    response_model=VectorSyncResponse,
+    summary="Synchronize and index incident evidence vectors into Qdrant",
+)
+def sync_incident_vectors(incident_id: str) -> VectorSyncResponse:
+    """Index all synthetic and uploaded evidence for an incident into Qdrant."""
+    try:
+        service = get_vector_index_service()
+        res = service.sync_incident(incident_id)
+        return VectorSyncResponse(**res)
+    except VectorServiceError as e:
+        raise HTTPException(status_code=e.status_code, detail=e.message)
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to synchronize incident vectors.",
+        )
+
 
