@@ -71,7 +71,7 @@ class EmbeddingProvider(ABC):
 
 
 class GeminiEmbeddingProvider(EmbeddingProvider):
-    """Production embedding provider using Google Cloud Vertex AI and gemini-embedding-2.
+    """Production embedding provider using Google Cloud Vertex AI and gemini-embedding-001.
 
     Authenticates via Google Cloud Application Default Credentials (ADC) attached
     to the Cloud Run service account. Never uses or expects hardcoded API keys.
@@ -130,7 +130,7 @@ class GeminiEmbeddingProvider(EmbeddingProvider):
         embeddings: List[List[float]] = []
 
         # Embed each chunk individually to ensure 1:1 chunk-to-embedding mapping
-        # and prevent gemini-embedding-2 from treating a list of strings as one multi-part Content
+        # and prevent gemini-embedding-001 from treating a list of strings as one multi-part Content
         for text in texts:
             formatted_text = f"{inst}\n{text}" if inst else text
             try:

@@ -66,9 +66,9 @@ class Settings:
     GOOGLE_CLOUD_LOCATION: str = (
         os.getenv("GOOGLE_CLOUD_LOCATION", "").strip()
         or os.getenv("GOOGLE_CLOUD_REGION", "").strip()
-        or "global"
+        or "us-central1"
     )
-    EMBEDDING_MODEL: str = os.getenv("EMBEDDING_MODEL", "").strip() or "gemini-embedding-2"
+    EMBEDDING_MODEL: str = os.getenv("EMBEDDING_MODEL", "").strip() or "gemini-embedding-001"
     EMBEDDING_DIMENSION: int = int(os.getenv("EMBEDDING_DIMENSION", "768"))
 
 settings = Settings()

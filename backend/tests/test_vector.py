@@ -592,15 +592,23 @@ class TestQdrantVectorRetrieval(unittest.TestCase):
 
     # 22. GeminiEmbeddingProvider initialization and config propagation
     def test_22_gemini_embedding_provider_initialization(self):
+        # Default initialization from settings
+        default_provider = GeminiEmbeddingProvider()
+        self.assertEqual(default_provider.project, "retrace-abb-2026")
+        self.assertEqual(default_provider.location, "us-central1")
+        self.assertEqual(default_provider.model, "gemini-embedding-001")
+        self.assertEqual(default_provider.dimension, 768)
+
+        # Explicit overrides
         provider = GeminiEmbeddingProvider(
             project="retrace-abb-2026",
             location="us-central1",
-            model="gemini-embedding-2",
+            model="gemini-embedding-001",
             dimension=768,
         )
         self.assertEqual(provider.project, "retrace-abb-2026")
         self.assertEqual(provider.location, "us-central1")
-        self.assertEqual(provider.model, "gemini-embedding-2")
+        self.assertEqual(provider.model, "gemini-embedding-001")
         self.assertEqual(provider.dimension, 768)
 
     # 23. GeminiEmbeddingProvider embeds each chunk individually with correct API structure
@@ -608,7 +616,7 @@ class TestQdrantVectorRetrieval(unittest.TestCase):
         provider = GeminiEmbeddingProvider(
             project="retrace-abb-2026",
             location="us-central1",
-            model="gemini-embedding-2",
+            model="gemini-embedding-001",
             dimension=768,
         )
 
@@ -632,7 +640,7 @@ class TestQdrantVectorRetrieval(unittest.TestCase):
         self.assertEqual(mock_client.models.embed_content.call_count, 2)
         for call_args in mock_client.models.embed_content.call_args_list:
             kwargs = call_args.kwargs
-            self.assertEqual(kwargs["model"], "gemini-embedding-2")
+            self.assertEqual(kwargs["model"], "gemini-embedding-001")
             self.assertIsInstance(kwargs["contents"], str)
             self.assertIn("output_dimensionality", str(kwargs.get("config")))
 
@@ -641,13 +649,13 @@ class TestQdrantVectorRetrieval(unittest.TestCase):
         provider = GeminiEmbeddingProvider(
             project="retrace-abb-2026",
             location="us-central1",
-            model="gemini-embedding-2",
+            model="gemini-embedding-001",
             dimension=768,
         )
 
         class MockClientError(Exception):
             code = 400
-            message = "Publisher Model projects/retrace-abb-2026/locations/us-central1/publishers/google/models/gemini-embedding-2 not found"
+            message = "Publisher Model projects/retrace-abb-2026/locations/us-central1/publishers/google/models/gemini-embedding-001 not found"
 
         mock_client = MagicMock()
         mock_client.models.embed_content.side_effect = MockClientError("ClientError occurred")
@@ -667,7 +675,7 @@ class TestQdrantVectorRetrieval(unittest.TestCase):
             # Check safe diagnostic log
             log_output = "\n".join(log_cm.output)
             self.assertIn("status_code=400", log_output)
-            self.assertIn("model='gemini-embedding-2'", log_output)
+            self.assertIn("model='gemini-embedding-001'", log_output)
             self.assertIn("location='us-central1'", log_output)
             self.assertIn("dimension=768", log_output)
             # Must NEVER log evidence content
