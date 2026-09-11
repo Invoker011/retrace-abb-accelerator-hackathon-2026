@@ -75,7 +75,82 @@ export const investigationService = {
     incidentId: string,
     question: string
   ): Promise<ChatMessage> {
-    // Attempt FastAPI backend query first
+    // Attempt Grounded Investigation Reasoning endpoint first
+    try {
+      const groundedRes = await apiClient.post<any>(`/api/incidents/${incidentId}/investigate`, {
+        query: question,
+        top_k: 8,
+      });
+
+      if (groundedRes && (groundedRes.summary || (groundedRes.findings && groundedRes.findings.length > 0))) {
+        const lines: string[] = [];
+        if (groundedRes.summary) {
+          lines.push(groundedRes.summary);
+        }
+
+        if (Array.isArray(groundedRes.findings) && groundedRes.findings.length > 0) {
+          lines.push('\n**Evidence-Grounded Findings:**');
+          groundedRes.findings.forEach((f: any) => {
+            const classLabel = f.classification || 'CORRELATED';
+            const citations = [
+              ...(f.evidence_ids || []).map((id: string) => `[${id}]`),
+              ...(f.event_ids || []).map((id: string) => `[${id}]`),
+              ...(f.asset_ids || []).map((id: string) => `@${id}`),
+            ].join(' ');
+            lines.push(`• **${classLabel}**: ${f.statement}${citations ? ` ${citations}` : ''}`);
+            if (f.basis) {
+              lines.push(`   _Basis_: ${f.basis}`);
+            }
+          });
+        }
+
+        if (Array.isArray(groundedRes.unknowns) && groundedRes.unknowns.length > 0) {
+          lines.push('\n**Identified Evidence Gaps (Unknown):**');
+          groundedRes.unknowns.forEach((u: string) => {
+            lines.push(`• ${u}`);
+          });
+        }
+
+        if (Array.isArray(groundedRes.recommended_checks) && groundedRes.recommended_checks.length > 0) {
+          lines.push('\n**Advisory Diagnostic Checks (Human Review Required):**');
+          groundedRes.recommended_checks.forEach((c: any) => {
+            lines.push(`• ${c.check} (Reason: ${c.reason})`);
+          });
+        }
+
+        const supportingEv = (groundedRes.sources_used || []).map((s: any) => ({
+          id: s.evidence_id || s.id,
+          filename: s.filename || 'Evidence Record',
+          sourceType: (s.source_type || s.sourceType || 'Historian and Time-Series Data') as EvidenceCategory,
+          summary: `${s.asset_id ? `Asset: ${s.asset_id}. ` : ''}${s.timestamp ? `Time: ${s.timestamp}. ` : ''}${s.original_reference ? `Ref: ${s.original_reference}` : ''}`.trim(),
+        }));
+
+        let dominantCategory: FindingCategory = 'CORRELATED';
+        if (groundedRes.findings && groundedRes.findings.length > 0) {
+          dominantCategory = groundedRes.findings[0].classification as FindingCategory;
+        }
+
+        return {
+          id: `MSG-${Date.now()}`,
+          sender: 'retrace',
+          content: lines.join('\n'),
+          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          supportingEvidence: supportingEv.length > 0 ? supportingEv : undefined,
+          findingReferenceCategory: dominantCategory,
+          suggestedFollowUps: [
+            'What happened before the shutdown?',
+            'Which assets were involved?',
+            'What evidence supports this finding?',
+            'What should the technician inspect next?',
+            'What information is still missing?',
+          ],
+        };
+      }
+    } catch {
+      // Fall through to query endpoint or local intelligence
+    }
+
+    // Attempt FastAPI backend query endpoint
     try {
       const apiRes = await apiClient.post<any>('/api/investigation/query', {
         incident_id: incidentId,
