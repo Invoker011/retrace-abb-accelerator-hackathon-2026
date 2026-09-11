@@ -217,6 +217,19 @@ class IngestionService:
         # 8. Deterministic non-AI metadata extraction
         extracted_meta = extract_evidence_metadata(file_bytes, safe_filename)
 
+        # Determine retrieval eligibility for uploaded evidence
+        from backend.services.evidence_eligibility import is_evidence_retrieval_eligible
+        desc_str = description.strip() if description else None
+        is_eligible = is_evidence_retrieval_eligible({
+            "original_filename": safe_filename,
+            "description": desc_str,
+            "metadata": extracted_meta,
+        })
+        if not is_eligible:
+            extracted_meta["retrieval_eligible"] = False
+            if not extracted_meta.get("use_type"):
+                extracted_meta["use_type"] = "test"
+
         # 9. Register provenance record
         now_iso = datetime.now(timezone.utc).isoformat()
         uploaded_record = UploadedEvidence(
@@ -228,11 +241,12 @@ class IngestionService:
             content_type=content_type or "application/octet-stream",
             file_size=len(file_bytes),
             asset_id=asset_id.strip() if asset_id else None,
-            description=description.strip() if description else None,
+            description=desc_str,
             storage_uri=storage_uri,
             uploaded_at=now_iso,
             processing_status="UPLOADED",
             sha256_hash=sha256_hash,
+            retrieval_eligible=is_eligible,
             metadata=extracted_meta,
         )
 

@@ -5,7 +5,10 @@ into factual EvidenceChunks without inventing observations, timestamps, or capti
 """
 import re
 import hashlib
+import logging
 from typing import Any, Dict, List, Optional
+
+logger = logging.getLogger("retrace.chunking")
 
 from backend.schemas.evidence import Evidence
 from backend.schemas.upload import UploadedEvidence
@@ -83,6 +86,10 @@ class EvidenceChunkingService:
         Uses only factual content actually present in the evidence object (rawContent,
         previewRows, extractedEvent). Does not manufacture observations.
         """
+        from backend.services.evidence_eligibility import is_evidence_retrieval_eligible
+        if not is_evidence_retrieval_eligible(evidence):
+            return []
+
         chunks: List[EvidenceChunk] = []
         ev_id = evidence.id
         asset_id = evidence.asset_id
@@ -223,6 +230,11 @@ class EvidenceChunkingService:
         Reuses actual extracted metadata (preview_text, columns, preview_rows).
         DOES NOT invent text or captions if none was extracted.
         """
+        from backend.services.evidence_eligibility import is_evidence_retrieval_eligible
+        if not is_evidence_retrieval_eligible(record):
+            logger.info("[RETRACE] Skipping chunking for retrieval-ineligible upload '%s'", getattr(record, 'evidence_id', 'unknown'))
+            return []
+
         chunks: List[EvidenceChunk] = []
         ev_id = record.evidence_id
         incident_id = record.incident_id
@@ -360,12 +372,15 @@ class EvidenceChunkingService:
         uploaded_evidence: List[UploadedEvidence],
     ) -> List[EvidenceChunk]:
         """Aggregate and deterministically chunk all incident evidence."""
+        from backend.services.evidence_eligibility import is_evidence_retrieval_eligible
         all_chunks: List[EvidenceChunk] = []
 
         for syn in synthetic_evidence:
-            all_chunks.extend(self.chunk_synthetic_evidence(syn, incident_id))
+            if is_evidence_retrieval_eligible(syn):
+                all_chunks.extend(self.chunk_synthetic_evidence(syn, incident_id))
 
         for upl in uploaded_evidence:
-            all_chunks.extend(self.chunk_uploaded_evidence(upl))
+            if is_evidence_retrieval_eligible(upl):
+                all_chunks.extend(self.chunk_uploaded_evidence(upl))
 
         return all_chunks

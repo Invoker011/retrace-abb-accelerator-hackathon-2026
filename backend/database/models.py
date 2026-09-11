@@ -56,6 +56,14 @@ if HAS_SQLALCHEMY:
                 if hasattr(self.uploaded_at, "isoformat")
                 else str(self.uploaded_at)
             )
+            meta = dict(self.metadata_dict or {})
+            from backend.services.evidence_eligibility import is_evidence_retrieval_eligible
+            is_eligible = is_evidence_retrieval_eligible(self)
+            if not is_eligible:
+                meta["retrieval_eligible"] = False
+                if not meta.get("use_type"):
+                    meta["use_type"] = "test"
+
             return UploadedEvidence(
                 evidence_id=self.evidence_id,
                 incident_id=self.incident_id,
@@ -70,7 +78,8 @@ if HAS_SQLALCHEMY:
                 uploaded_at=uploaded_iso,
                 processing_status=self.processing_status,
                 sha256_hash=self.sha256_hash,
-                metadata=self.metadata_dict or {},
+                retrieval_eligible=is_eligible,
+                metadata=meta,
             )
 
         @classmethod
@@ -82,6 +91,11 @@ if HAS_SQLALCHEMY:
                     uploaded_at_val = datetime.fromisoformat(uploaded_at_val)
                 except Exception:
                     uploaded_at_val = datetime.now(timezone.utc)
+            meta = dict(item.metadata or {})
+            if getattr(item, "retrieval_eligible", True) is False:
+                meta["retrieval_eligible"] = False
+                if not meta.get("use_type"):
+                    meta["use_type"] = "test"
             return cls(
                 evidence_id=item.evidence_id,
                 incident_id=item.incident_id,
@@ -96,7 +110,7 @@ if HAS_SQLALCHEMY:
                 uploaded_at=uploaded_at_val,
                 processing_status=item.processing_status,
                 sha256_hash=item.sha256_hash,
-                metadata_dict=item.metadata or {},
+                metadata_dict=meta,
             )
 else:
     class Base:  # type: ignore

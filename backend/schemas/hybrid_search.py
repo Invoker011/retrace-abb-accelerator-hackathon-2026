@@ -40,6 +40,18 @@ class HybridEvidenceResult(BaseModel):
 
     provenance: Dict[str, Any] = Field(default_factory=dict, description="Metadata preserving exact data provenance")
 
+    def __init__(self, **kwargs):
+        # Timestamp Normalization: If top-level timestamp is missing,
+        # populate it from factual provenance.normalized_timestamp.
+        # Do not invent timestamps.
+        ts = kwargs.get("timestamp")
+        prov = kwargs.get("provenance") or {}
+        if not ts and isinstance(prov, dict):
+            norm_ts = prov.get("normalized_timestamp")
+            if norm_ts and str(norm_ts).strip():
+                kwargs["timestamp"] = str(norm_ts).strip()
+        super().__init__(**kwargs)
+
 
 class GraphContextAsset(BaseModel):
     """Asset node included in the enriched context graph."""

@@ -43,6 +43,28 @@ class UploadedEvidenceRepositoryInterface(ABC):
 class PostgresUploadedEvidenceRepository(UploadedEvidenceRepositoryInterface):
     """PostgreSQL implementation using SQLAlchemy 2.x session and parameterized queries."""
 
+    def _ensure_test_artifacts_marked_ineligible(self, session):
+        """Ensures persistence verification artifacts in PostgreSQL are explicitly marked retrieval-ineligible."""
+        try:
+            from sqlalchemy import select
+            stmt = select(UploadedEvidenceModel)
+            records = session.execute(stmt).scalars().all()
+            dirty = False
+            for r in records:
+                desc = (r.description or "").lower()
+                fn = (r.original_filename or "").lower()
+                if "verification upload" in desc or "persistence verification" in desc or "persistence_test" in fn:
+                    meta = dict(r.metadata_dict or {})
+                    if meta.get("retrieval_eligible") is not False:
+                        meta["retrieval_eligible"] = False
+                        meta["use_type"] = "test"
+                        r.metadata_dict = meta
+                        dirty = True
+            if dirty:
+                session.flush()
+        except Exception as e:
+            logger.debug("[RETRACE] Check for test artifact metadata: %s", type(e).__name__)
+
     def create(self, record: UploadedEvidence) -> UploadedEvidence:
         try:
             from sqlalchemy.orm import Session
@@ -83,6 +105,7 @@ class PostgresUploadedEvidenceRepository(UploadedEvidenceRepositoryInterface):
         with get_db_session() as session:
             if session is None:
                 return []
+            self._ensure_test_artifacts_marked_ineligible(session)
             stmt = (
                 select(UploadedEvidenceModel)
                 .where(UploadedEvidenceModel.incident_id == incident_id.strip())
@@ -132,6 +155,14 @@ class InMemoryUploadedEvidenceRepository(UploadedEvidenceRepositoryInterface):
         self._records: Dict[str, UploadedEvidence] = {}
 
     def create(self, record: UploadedEvidence) -> UploadedEvidence:
+        from backend.services.evidence_eligibility import is_evidence_retrieval_eligible
+        if not is_evidence_retrieval_eligible(record):
+            record.retrieval_eligible = False
+            if record.metadata is None:
+                record.metadata = {}
+            record.metadata["retrieval_eligible"] = False
+            if not record.metadata.get("use_type"):
+                record.metadata["use_type"] = "test"
         self._records[record.evidence_id] = record
         return record
 

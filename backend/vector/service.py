@@ -30,6 +30,7 @@ from backend.vector.repository import (
     QdrantEvidenceVectorRepository,
     InMemoryEvidenceVectorRepository,
 )
+from backend.services.evidence_eligibility import is_evidence_retrieval_eligible
 
 logger = logging.getLogger("retrace.vector")
 
@@ -108,11 +109,14 @@ class VectorIndexService:
             raise VectorServiceError(f"Incident '{incident_id}' not found.", status_code=404)
 
         try:
-            # 1. Fetch synthetic evidence
-            synthetic_evidence = incident_service.get_incident_evidence(incident_id)
+            from backend.services.evidence_eligibility import is_evidence_retrieval_eligible
+            # 1. Fetch synthetic evidence (filter retrieval-eligible)
+            raw_synthetic = incident_service.get_incident_evidence(incident_id)
+            synthetic_evidence = [s for s in raw_synthetic if is_evidence_retrieval_eligible(s)]
 
-            # 2. Fetch persistent uploaded evidence
-            uploaded_evidence = self.upload_repo.get_by_incident(incident_id)
+            # 2. Fetch persistent uploaded evidence (filter retrieval-eligible)
+            raw_uploaded = self.upload_repo.get_by_incident(incident_id)
+            uploaded_evidence = [u for u in raw_uploaded if is_evidence_retrieval_eligible(u)]
 
             # 3. Build factual chunks
             chunks = self.chunking_service.build_chunks_for_incident(
@@ -215,6 +219,8 @@ class VectorIndexService:
 
             results: List[Dict[str, Any]] = []
             for chunk, score in raw_results:
+                if not is_evidence_retrieval_eligible(chunk):
+                    continue
                 results.append(
                     {
                         "similarity_score": round(score, 4),
@@ -224,6 +230,7 @@ class VectorIndexService:
                         "source_type": chunk.source_type,
                         "filename": chunk.filename,
                         "text": chunk.text,
+                        "timestamp": chunk.timestamp,
                         "provenance": chunk.provenance,
                     }
                 )

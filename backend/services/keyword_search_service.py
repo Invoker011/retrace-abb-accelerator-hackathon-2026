@@ -135,7 +135,10 @@ class KeywordEvidenceSearchService:
         # 3. Score each chunk deterministically
         scored_results: List[Tuple[float, EvidenceChunk, bool]] = []
 
+        from backend.services.evidence_eligibility import is_evidence_retrieval_eligible
         for chunk in filtered_chunks:
+            if not is_evidence_retrieval_eligible(chunk):
+                continue
             score = 0.0
             chunk_text_lower = chunk.text.lower()
             chunk_filename_lower = chunk.filename.lower()

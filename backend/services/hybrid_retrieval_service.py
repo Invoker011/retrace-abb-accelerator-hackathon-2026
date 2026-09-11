@@ -66,12 +66,21 @@ class HybridRetrievalService:
         id_service: Optional[IdentifierRecognitionService] = None,
         temporal_service: Optional[TemporalContextService] = None,
         graph_service: Optional[ContextGraphService] = None,
+        upload_repo: Optional[Any] = None,
     ):
         self._vector_service = vector_service
         self._keyword_service = keyword_service
         self._id_service = id_service or identifier_recognition_service
         self._temporal_service = temporal_service or temporal_context_service
         self._graph_service = graph_service
+        self._upload_repo = upload_repo
+
+    @property
+    def upload_repo(self):
+        if self._upload_repo is not None:
+            return self._upload_repo
+        from backend.repositories.uploaded_evidence_repository import get_uploaded_evidence_repository
+        return get_uploaded_evidence_repository()
 
     @property
     def vector_service(self) -> VectorIndexService:
@@ -171,12 +180,52 @@ class HybridRetrievalService:
                 raise HybridRetrievalError(f"Vector search failed: {type(e).__name__}", status_code=500)
 
         # 5 & 6. Reciprocal Rank Fusion & Deduplication
+        from backend.services.evidence_eligibility import is_evidence_retrieval_eligible
+
+        def _resolve_factual_timestamp(ts: Optional[str], prov: Optional[Dict[str, Any]]) -> Optional[str]:
+            """Populate timestamp from provenance.normalized_timestamp if top-level timestamp is missing.
+
+            Never invent timestamps.
+            """
+            if ts and str(ts).strip():
+                return str(ts).strip()
+            if isinstance(prov, dict):
+                norm_ts = prov.get("normalized_timestamp")
+                if norm_ts and str(norm_ts).strip():
+                    return str(norm_ts).strip()
+            return None
+
+        # Filter ineligible semantic results
+        eligible_semantic_results: List[Dict[str, Any]] = []
+        for s_item in semantic_results:
+            if not is_evidence_retrieval_eligible(s_item):
+                continue
+            ev_id = s_item.get("evidence_id")
+            if ev_id and ev_id.startswith("EVD-UPL-"):
+                upl = self.upload_repo.get_by_id(ev_id)
+                if upl and not is_evidence_retrieval_eligible(upl):
+                    continue
+            eligible_semantic_results.append(s_item)
+
+        # Filter ineligible keyword results
+        eligible_keyword_results: List[Dict[str, Any]] = []
+        for k_item in keyword_results:
+            if not is_evidence_retrieval_eligible(k_item):
+                continue
+            ev_id = k_item.get("evidence_id")
+            if ev_id and ev_id.startswith("EVD-UPL-"):
+                upl = self.upload_repo.get_by_id(ev_id)
+                if upl and not is_evidence_retrieval_eligible(upl):
+                    continue
+            eligible_keyword_results.append(k_item)
+
         # Map: chunk_id -> fused accumulator dict
         fused_map: Dict[str, Dict[str, Any]] = {}
 
         # Process Semantic Channel
-        for s_idx, s_item in enumerate(semantic_results, start=1):
+        for s_idx, s_item in enumerate(eligible_semantic_results, start=1):
             c_id = s_item["chunk_id"]
+            s_ts = _resolve_factual_timestamp(s_item.get("timestamp"), s_item.get("provenance"))
             if c_id not in fused_map:
                 fused_map[c_id] = {
                     "chunk_id": c_id,
@@ -185,7 +234,7 @@ class HybridRetrievalService:
                     "filename": s_item["filename"],
                     "source_type": s_item["source_type"],
                     "text": s_item["text"],
-                    "timestamp": s_item.get("timestamp"),
+                    "timestamp": s_ts,
                     "provenance": s_item.get("provenance", {}),
                     "semantic_rank": s_idx,
                     "similarity_score": s_item.get("similarity_score"),
@@ -200,10 +249,13 @@ class HybridRetrievalService:
                 if "semantic" not in fused_map[c_id]["retrieval_channels"]:
                     fused_map[c_id]["retrieval_channels"].append("semantic")
                 fused_map[c_id]["rrf_score"] += 1.0 / (RRF_K + s_idx)
+                if not fused_map[c_id].get("timestamp") and s_ts:
+                    fused_map[c_id]["timestamp"] = s_ts
 
         # Process Keyword Channel
-        for k_idx, k_item in enumerate(keyword_results, start=1):
+        for k_idx, k_item in enumerate(eligible_keyword_results, start=1):
             c_id = k_item["chunk_id"]
+            k_ts = _resolve_factual_timestamp(k_item.get("timestamp"), k_item.get("provenance"))
             if c_id not in fused_map:
                 channels = ["keyword"]
                 if k_item.get("has_identifier_match"):
@@ -215,7 +267,7 @@ class HybridRetrievalService:
                     "filename": k_item["filename"],
                     "source_type": k_item["source_type"],
                     "text": k_item["text"],
-                    "timestamp": k_item.get("timestamp"),
+                    "timestamp": k_ts,
                     "provenance": k_item.get("provenance", {}),
                     "semantic_rank": None,
                     "similarity_score": None,
@@ -233,8 +285,8 @@ class HybridRetrievalService:
                     fused_map[c_id]["retrieval_channels"].append("identifier")
                 fused_map[c_id]["rrf_score"] += 1.0 / (RRF_K + k_idx)
                 # If timestamp or provenance was missing from semantic result, backfill from keyword
-                if not fused_map[c_id].get("timestamp") and k_item.get("timestamp"):
-                    fused_map[c_id]["timestamp"] = k_item.get("timestamp")
+                if not fused_map[c_id].get("timestamp") and k_ts:
+                    fused_map[c_id]["timestamp"] = k_ts
                 if not fused_map[c_id].get("provenance") and k_item.get("provenance"):
                     fused_map[c_id]["provenance"] = k_item.get("provenance")
 
@@ -272,7 +324,7 @@ class HybridRetrievalService:
                     "filename": item["filename"],
                     "source_type": item["source_type"],
                     "text": item["text"],
-                    "timestamp": item.get("timestamp"),
+                    "timestamp": _resolve_factual_timestamp(item.get("timestamp"), item.get("provenance")),
                     "provenance": item.get("provenance", {}),
                 }
             )
