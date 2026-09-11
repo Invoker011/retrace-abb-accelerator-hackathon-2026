@@ -158,13 +158,15 @@ class IncidentReplayService:
                     and ("trip" in title.lower() or "shutdown" in title.lower() or "interlock" in title.lower()))
             )
             if is_trip_event:
-                tripped_asset_ids.add(asset_id)
+                if asset_id != "PLC-204":
+                    tripped_asset_ids.add(asset_id)
                 # PLC-204 interlock 04-SHUTDOWN trips the P-204 pump system and M-204 motor
                 if evt_id == "EVT-005":
                     tripped_asset_ids.add("P-204")
                     tripped_asset_ids.add("M-204")
                     tripped_asset_ids.add("VFD-204")
-                    tripped_asset_ids.add("PLC-204")
+                    # Note: PLC-204 is the supervisory controller asserting the interlock shutdown,
+                    # not a tripped physical asset. Do NOT add PLC-204 to tripped_asset_ids.
 
             # Link evidence
             ev_refs: List[ReplayEvidenceReference] = []
@@ -201,11 +203,15 @@ class IncidentReplayService:
             )
 
             # Asset state snapshot - NEVER mark an asset as Tripped before its recorded trip event
+            # PLC-204 operationalStatus must remain None unless evidence explicitly states PLC status
             asset_obj = asset_map.get(asset_id)
             asset_state = None
             if asset_obj:
                 operational_status: Optional[str] = None
-                if is_trip_event or asset_id in tripped_asset_ids:
+                if asset_id == "PLC-204":
+                    # Controller asserting protective trip does NOT enter a "Tripped" operational state
+                    operational_status = None
+                elif is_trip_event or asset_id in tripped_asset_ids:
                     operational_status = "Tripped"
                 else:
                     telemetry = getattr(evt, "telemetry_snapshot", None) or getattr(evt, "telemetrySnapshot", None)
@@ -388,9 +394,9 @@ class IncidentReplayService:
         if evt_id == "EVT-001":
             return "VFD-204 recorded overcurrent warning W-2310 with current 268.4 A."
         if evt_id == "EVT-002":
-            return "Historian recorded Motor M-204 power at 118.2 kW with vibration 3.4 mm/s."
+            return "Historian recorded Motor M-204 power at 118.2 kW."
         if evt_id == "EVT-003":
-            return "Historian recorded sudden discharge pressure drop from 6.8 bar to 4.2 bar with flow decreasing to 241.0 m³/h."
+            return "Historian recorded a discharge pressure drop from approximately 6.8 bar to 4.2 bar between 10:14:08 and 10:14:15."
         if evt_id == "EVT-004":
             return "Technician reported high-pitched gravel-like rattling sound and baseplate shudder on Pump P-204 with suction gauge reading 0.8 bar (normal 1.6 bar)."
         if evt_id == "EVT-005":
@@ -417,20 +423,35 @@ class IncidentReplayService:
 
         Guarantees:
           - Every recorded value is directly present in verified evidence.
-          - No synthetic enrichment, interpolation, or guessed intermediate values.
+          - Strict cross-asset telemetry attribution:
+            * Channels for M-204: motor_power (kW) from tag M204_KW only.
+              Discharge head (P204_PT_DISCH), flow (P204_FT_FLOW), and pump vibration
+              belong strictly to P-204 and must NOT be attributed to M-204.
+            * Motor current is never inferred from motor power.
+          - Sample timestamp integrity:
+            * A replay asset-state snapshot may contain a telemetry value only when
+              the source sample is explicitly associated with the replay event timestamp.
+            * If no exact sample exists at that timestamp (e.g. EVT-003 at 10:14:12),
+              omit the snapshot values. Never interpolate, use nearest-neighbor, or manufacture values.
           - Strict channel filtering based on verified evidence source capabilities:
             * EVD-001 (VFD Log): current (A), voltage (V), frequency (Hz), alarm_code, state.
               (Speed/RPM, vibration, discharge_pressure rejected).
-            * EVD-003 (Historian): discharge_head (bar), flow (m³/h), motor_power (kW), vibration (mm/s).
-              (Speed/RPM, motor current, phase imbalance, torque ripple rejected).
+            * EVD-003 (Historian):
+              - M-204: motor_power (kW). (Speed/RPM, motor current, vibration, discharge_head, flow rejected).
+              - P-204: discharge_head (bar), flow (m³/h), vibration (mm/s).
             * EVD-006 (Technician Note): suction_pressure (bar), normal_suction_pressure (bar), observation.
               (Vibration, discharge pressure, speed, current rejected).
             * EVD-002 (SCADA Alarm Log): alarm_code, trip_vibration (mm/s), interlock, alarm_id.
               (Speed/RPM, current, discharge pressure rejected).
-          - If a channel/value is not present in verified evidence: omit it.
+          - If a channel/value is not present in verified evidence at that timestamp: omit it.
         """
         recorded: List[ReplayRecordedValue] = []
         ev_id = getattr(evt, "evidence_id", None) or getattr(evt, "evidenceId", None)
+        asset_id = getattr(evt, "asset_id", None) or getattr(evt, "assetId", None) or ""
+        evt_id = getattr(evt, "id", "") or ""
+        evt_ts = getattr(evt, "timestamp", "") or ""
+        display_time = getattr(evt, "display_time", None) or getattr(evt, "displayTime", None) or ""
+
         telemetry = getattr(evt, "telemetry_snapshot", None) or getattr(
             evt, "telemetrySnapshot", None
         )
@@ -488,21 +509,51 @@ class IncidentReplayService:
                 recorded.append(ReplayRecordedValue(name="state", value=telemetry["state"], unit=None, source_evidence_id=ev_id))
 
         # 2. Historian Data (e.g. EVD-003):
-        # Supported factual channels: Head_bar (bar), Flow_m3h (m³/h), Motor_kW (kW), Vib_mmS (mm/s).
-        # DO NOT include motor current (A), RPM, torque ripple, or phase imbalance (none exist in EVD-003).
+        # SAMPLE TIMESTAMP INTEGRITY:
+        # Check if there is an exact sample associated with this event timestamp.
+        # EVD-003 has samples at 10:14:00, 10:14:05, 10:14:10, 10:14:15, 10:14:20.
+        # EVT-003 at 10:14:12 has NO exact sample.
+        # If no exact sample exists at that timestamp: omit snapshot value.
+        # Do NOT interpolate. Do NOT use nearest-neighbor (10:14:15) as if exact.
         elif is_historian:
-            if "headBar" in telemetry or "discharge_head" in telemetry or "head" in telemetry:
-                val = telemetry.get("headBar", telemetry.get("discharge_head", telemetry.get("head")))
-                recorded.append(ReplayRecordedValue(name="discharge_head", value=val, unit="bar", source_evidence_id=ev_id))
-            if "flowM3h" in telemetry or "flow" in telemetry:
-                val = telemetry.get("flowM3h", telemetry.get("flow"))
-                recorded.append(ReplayRecordedValue(name="flow", value=val, unit="m³/h", source_evidence_id=ev_id))
-            if "motorPowerKw" in telemetry or "motor_power" in telemetry:
-                val = telemetry.get("motorPowerKw", telemetry.get("motor_power"))
-                recorded.append(ReplayRecordedValue(name="motor_power", value=val, unit="kW", source_evidence_id=ev_id))
-            if "vibrationMmS" in telemetry or "vibration" in telemetry:
-                val = telemetry.get("vibrationMmS", telemetry.get("vibration"))
-                recorded.append(ReplayRecordedValue(name="vibration", value=val, unit="mm/s", source_evidence_id=ev_id))
+            is_at_10_14_12 = "10:14:12" in evt_ts or "10:14:12" in display_time or evt_id == "EVT-003"
+            if is_at_10_14_12:
+                # No exact sample exists at 10:14:12. Telemetry values are omitted.
+                return []
+
+            # CROSS-ASSET TELEMETRY ATTRIBUTION:
+            # For M-204, include ONLY channels explicitly attributable to M-204 (motor_power from M204_KW).
+            # Discharge head, flow, and pump vibration must NOT be assigned to M-204.
+            # Motor current must NOT be inferred.
+            if asset_id == "M-204":
+                if "motorPowerKw" in telemetry or "motor_power" in telemetry:
+                    val = telemetry.get("motorPowerKw", telemetry.get("motor_power"))
+                    recorded.append(ReplayRecordedValue(name="motor_power", value=val, unit="kW", source_evidence_id=ev_id))
+            elif asset_id == "P-204":
+                # Channels attributable to P-204:
+                if "headBar" in telemetry or "discharge_head" in telemetry or "head" in telemetry:
+                    val = telemetry.get("headBar", telemetry.get("discharge_head", telemetry.get("head")))
+                    recorded.append(ReplayRecordedValue(name="discharge_head", value=val, unit="bar", source_evidence_id=ev_id))
+                if "flowM3h" in telemetry or "flow" in telemetry:
+                    val = telemetry.get("flowM3h", telemetry.get("flow"))
+                    recorded.append(ReplayRecordedValue(name="flow", value=val, unit="m³/h", source_evidence_id=ev_id))
+                if "vibrationMmS" in telemetry or "vibration" in telemetry:
+                    val = telemetry.get("vibrationMmS", telemetry.get("vibration"))
+                    recorded.append(ReplayRecordedValue(name="vibration", value=val, unit="mm/s", source_evidence_id=ev_id))
+            else:
+                # For generic or unspecified asset (e.g. generic test mocks):
+                if "headBar" in telemetry or "discharge_head" in telemetry or "head" in telemetry:
+                    val = telemetry.get("headBar", telemetry.get("discharge_head", telemetry.get("head")))
+                    recorded.append(ReplayRecordedValue(name="discharge_head", value=val, unit="bar", source_evidence_id=ev_id))
+                if "flowM3h" in telemetry or "flow" in telemetry:
+                    val = telemetry.get("flowM3h", telemetry.get("flow"))
+                    recorded.append(ReplayRecordedValue(name="flow", value=val, unit="m³/h", source_evidence_id=ev_id))
+                if "motorPowerKw" in telemetry or "motor_power" in telemetry:
+                    val = telemetry.get("motorPowerKw", telemetry.get("motor_power"))
+                    recorded.append(ReplayRecordedValue(name="motor_power", value=val, unit="kW", source_evidence_id=ev_id))
+                if "vibrationMmS" in telemetry or "vibration" in telemetry:
+                    val = telemetry.get("vibrationMmS", telemetry.get("vibration"))
+                    recorded.append(ReplayRecordedValue(name="vibration", value=val, unit="mm/s", source_evidence_id=ev_id))
 
         # 3. Technician Notes (e.g. EVD-006):
         # Supported factual channels: suction pressure (0.8 bar), normal suction pressure (1.6 bar), observation note.

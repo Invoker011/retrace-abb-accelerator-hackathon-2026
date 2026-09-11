@@ -389,12 +389,12 @@ class TestIncidentReplay(unittest.TestCase):
                 self.assertNotIn(name, ["speed", "rpm", "discharge_pressure", "vibration"])
             elif eid == "EVT-002":
                 self.assertEqual(src_id, "EVD-003")
-                self.assertIn(name, ["motor_power", "vibration", "discharge_head", "flow"])
-                self.assertNotIn(name, ["speed", "rpm", "current", "phase_imbalance", "torque_ripple"])
+                self.assertEqual(name, "motor_power")
+                self.assertNotIn(name, ["discharge_head", "flow", "vibration", "speed", "rpm", "current", "phase_imbalance", "torque_ripple"])
             elif eid == "EVT-003":
                 self.assertEqual(src_id, "EVD-003")
-                self.assertIn(name, ["discharge_head", "flow", "motor_power", "vibration"])
-                self.assertNotIn(name, ["speed", "rpm", "current"])
+                # EVT-003 at 10:14:12 has no exact sample; missing telemetry is omitted
+                self.fail(f"EVT-003 should have no recorded values, but found: {name}")
             elif eid == "EVT-004":
                 self.assertEqual(src_id, "EVD-006")
                 self.assertIn(name, ["suction_pressure", "normal_suction_pressure", "observation"])
@@ -466,8 +466,9 @@ class TestIncidentReplay(unittest.TestCase):
         self.assertNotEqual(evt_004.asset_state.operational_status, "Tripped")
         self.assertIsNone(evt_004.asset_state.operational_status)
 
-        # At EVT-005, recorded protective trip event occurs
-        self.assertEqual(evt_005.asset_state.operational_status, "Tripped")
+        # At EVT-005, PLC-204 asserts protective trip, but PLC-204 itself is not in Tripped state
+        self.assertNotEqual(evt_005.asset_state.operational_status, "Tripped")
+        self.assertIsNone(evt_005.asset_state.operational_status)
 
     def test_reg_5_relationship_descriptions_remain_null_if_neo4j_null(self):
         """5. Relationship descriptions remain null if Neo4j description is null."""
@@ -528,11 +529,11 @@ class TestIncidentReplay(unittest.TestCase):
         )
         self.assertEqual(
             descriptions["EVT-002"],
-            "Historian recorded Motor M-204 power at 118.2 kW with vibration 3.4 mm/s.",
+            "Historian recorded Motor M-204 power at 118.2 kW.",
         )
         self.assertEqual(
             descriptions["EVT-003"],
-            "Historian recorded sudden discharge pressure drop from 6.8 bar to 4.2 bar with flow decreasing to 241.0 m³/h.",
+            "Historian recorded a discharge pressure drop from approximately 6.8 bar to 4.2 bar between 10:14:08 and 10:14:15.",
         )
         self.assertEqual(
             descriptions["EVT-004"],
@@ -607,6 +608,150 @@ class TestIncidentReplay(unittest.TestCase):
             self.assertIsInstance(r, AssetRelationship)
             self.assertIsNone(r.description)
             self.assertIn(r.relation_type, ["powers", "drives", "monitored by"])
+
+    # =========================================================================
+    # FORENSIC ATTRIBUTION REGRESSION SUITE
+    # =========================================================================
+
+    def test_forensic_1_evt002_m204_does_not_contain_p204_discharge_head(self):
+        """1. EVT-002 M-204 state does not contain P-204 discharge_head."""
+        res = self._get_replay("INC-2026-001")
+        evt_002 = next(e for e in res.events if e.event_id == "EVT-002")
+        names_event = [r.name for r in evt_002.recorded_values]
+        names_state = [r.name for r in evt_002.asset_state.recorded_values] if evt_002.asset_state else []
+        self.assertNotIn("discharge_head", names_event)
+        self.assertNotIn("head", names_event)
+        self.assertNotIn("discharge_head", names_state)
+
+    def test_forensic_2_evt002_m204_does_not_contain_p204_flow(self):
+        """2. EVT-002 M-204 state does not contain P-204 flow."""
+        res = self._get_replay("INC-2026-001")
+        evt_002 = next(e for e in res.events if e.event_id == "EVT-002")
+        names_event = [r.name for r in evt_002.recorded_values]
+        names_state = [r.name for r in evt_002.asset_state.recorded_values] if evt_002.asset_state else []
+        self.assertNotIn("flow", names_event)
+        self.assertNotIn("flow", names_state)
+
+    def test_forensic_3_evt002_m204_does_not_contain_p204_vibration(self):
+        """3. EVT-002 M-204 state does not contain P-204 vibration."""
+        res = self._get_replay("INC-2026-001")
+        evt_002 = next(e for e in res.events if e.event_id == "EVT-002")
+        names_event = [r.name for r in evt_002.recorded_values]
+        names_state = [r.name for r in evt_002.asset_state.recorded_values] if evt_002.asset_state else []
+        self.assertNotIn("vibration", names_event)
+        self.assertNotIn("vibration", names_state)
+
+    def test_forensic_4_evt002_may_contain_m204_kw_motor_power(self):
+        """4. EVT-002 may contain M204_KW motor_power."""
+        res = self._get_replay("INC-2026-001")
+        evt_002 = next(e for e in res.events if e.event_id == "EVT-002")
+        pwr = next((r for r in evt_002.recorded_values if r.name == "motor_power"), None)
+        self.assertIsNotNone(pwr)
+        self.assertEqual(pwr.value, 118.2)
+        self.assertEqual(pwr.unit, "kW")
+        self.assertEqual(pwr.source_evidence_id, "EVD-003")
+
+    def test_forensic_5_no_motor_current_measurement_is_fabricated(self):
+        """5. No motor-current measurement is fabricated for M-204."""
+        res = self._get_replay("INC-2026-001")
+        evt_002 = next(e for e in res.events if e.event_id == "EVT-002")
+        names = [r.name for r in evt_002.recorded_values]
+        self.assertNotIn("current", names)
+        self.assertNotIn("motor_current", names)
+        self.assertNotIn("phase_current", names)
+
+    def test_forensic_6_evt003_does_not_present_101415_values_as_101412_values(self):
+        """6. EVT-003 does not present 10:14:15 values as 10:14:12 values."""
+        res = self._get_replay("INC-2026-001")
+        evt_003 = next(e for e in res.events if e.event_id == "EVT-003")
+        for r in evt_003.recorded_values:
+            # 10:14:15 values: 4.2 bar, 241.0 m3/h, 122.1 kW, 6.7 mm/s
+            self.assertNotIn(r.value, [4.2, 4.20, 241.0, 241, 122.1, 6.7])
+        if evt_003.asset_state and evt_003.asset_state.recorded_values:
+            for r in evt_003.asset_state.recorded_values:
+                self.assertNotIn(r.value, [4.2, 4.20, 241.0, 241, 122.1, 6.7])
+
+    def test_forensic_7_no_telemetry_interpolation_occurs(self):
+        """7. No telemetry interpolation occurs."""
+        res = self._get_replay("INC-2026-001")
+        evt_003 = next(e for e in res.events if e.event_id == "EVT-003")
+        # Since timestamp is 10:14:12 and samples are 10:14:10 and 10:14:15, no interpolated value is produced
+        self.assertEqual(len(evt_003.recorded_values), 0)
+
+    def test_forensic_8_missing_exact_time_telemetry_is_omitted(self):
+        """8. Missing exact-time telemetry is omitted."""
+        res = self._get_replay("INC-2026-001")
+        evt_003 = next(e for e in res.events if e.event_id == "EVT-003")
+        self.assertEqual(evt_003.recorded_values, [])
+        if evt_003.asset_state:
+            self.assertEqual(evt_003.asset_state.recorded_values, [])
+
+    def test_forensic_9_evt005_plc204_operational_status_is_not_tripped(self):
+        """9. EVT-005 PLC-204 operationalStatus is not 'Tripped'."""
+        res = self._get_replay("INC-2026-001")
+        evt_005 = next(e for e in res.events if e.event_id == "EVT-005")
+        self.assertEqual(evt_005.asset_id, "PLC-204")
+        self.assertNotEqual(evt_005.asset_state.operational_status, "Tripped")
+        self.assertIsNone(evt_005.asset_state.operational_status)
+
+    def test_forensic_10_evt005_still_preserves_alm_p204_trip_vib_9_2_and_04_shutdown(self):
+        """10. EVT-005 still preserves ALM-P204-TRIP-VIB, 9.2 mm/s, and 04-SHUTDOWN."""
+        res = self._get_replay("INC-2026-001")
+        evt_005 = next(e for e in res.events if e.event_id == "EVT-005")
+        names_to_vals = {r.name: r.value for r in evt_005.recorded_values}
+        self.assertIn("alarm_code", names_to_vals)
+        self.assertEqual(names_to_vals["alarm_code"], "ALM-P204-TRIP-VIB")
+        self.assertIn("trip_vibration", names_to_vals)
+        self.assertEqual(names_to_vals["trip_vibration"], 9.2)
+        self.assertIn("interlock", names_to_vals)
+        self.assertEqual(names_to_vals["interlock"], "04-SHUTDOWN")
+
+    def test_forensic_11_chronology_remains_0_4_11_17_27(self):
+        """11. Chronology remains 0, 4, 11, 17, 27."""
+        res = self._get_replay("INC-2026-001")
+        rel_seconds = [e.relative_seconds for e in res.events]
+        self.assertEqual(rel_seconds, [0, 4, 11, 17, 27])
+
+    def test_forensic_12_replay_window_filtering_remains_correct(self):
+        """12. Replay window filtering remains correct."""
+        res = self._get_replay("INC-2026-001", start_offset=4, end_offset=17)
+        self.assertEqual(len(res.events), 3)
+        self.assertEqual([e.event_id for e in res.events], ["EVT-002", "EVT-003", "EVT-004"])
+        self.assertEqual([e.sequence for e in res.events], [1, 2, 3])
+        self.assertEqual(res.summary.event_count, 3)
+
+    def test_forensic_13_cross_asset_isolation_on_synthetic_injection(self):
+        """13. Simulated cross-asset injection into M-204 event is strictly rejected."""
+        class MockM204Evt:
+            id = "EVT-TEST-M204"
+            asset_id = "M-204"
+            timestamp = "2026-09-08T10:14:05Z"
+            evidence_id = "EVD-003"
+            telemetry_snapshot = {
+                "headBar": 6.74,
+                "flowM3h": 310.2,
+                "vibrationMmS": 3.4,
+                "motorPowerKw": 118.2,
+                "currentA": 250.0,
+            }
+
+        extracted = IncidentReplayService._extract_recorded_values(MockM204Evt(), None)
+        extracted_dict = {r.name: r.value for r in extracted}
+        self.assertIn("motor_power", extracted_dict)
+        self.assertEqual(extracted_dict["motor_power"], 118.2)
+        self.assertNotIn("discharge_head", extracted_dict)
+        self.assertNotIn("flow", extracted_dict)
+        self.assertNotIn("vibration", extracted_dict)
+        self.assertNotIn("current", extracted_dict)
+
+    def test_forensic_14_evt003_description_factual_interval(self):
+        """14. EVT-003 description uses factual evidence interval without claiming exact state at 10:14:12."""
+        res = self._get_replay("INC-2026-001")
+        evt_003 = next(e for e in res.events if e.event_id == "EVT-003")
+        self.assertEqual(
+            evt_003.description,
+            "Historian recorded a discharge pressure drop from approximately 6.8 bar to 4.2 bar between 10:14:08 and 10:14:15.",
+        )
 
 
 if __name__ == "__main__":
