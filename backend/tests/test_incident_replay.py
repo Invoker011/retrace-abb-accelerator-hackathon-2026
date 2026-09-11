@@ -563,6 +563,51 @@ class TestIncidentReplay(unittest.TestCase):
         self.assertEqual(len(res.events), 5)
         self.assertEqual(res.summary.event_count, 5)
 
+    def test_asset_relationship_schema_accepts_description_none(self):
+        """Verify AssetRelationship schema accepts description=None and absent description."""
+        from backend.schemas.asset import AssetRelationship
+        from backend.services.incident_service import IncidentService
+
+        # 1. Direct instantiation with description=None
+        rel1 = AssetRelationship(
+            id="REL-TEST-001",
+            sourceAssetId="VFD-204",
+            targetAssetId="M-204",
+            relationType="powers",
+            description=None,
+        )
+        self.assertIsNone(rel1.description)
+        self.assertEqual(rel1.relation_type, "powers")
+
+        # 2. Direct instantiation with omitted description
+        rel2 = AssetRelationship(
+            id="REL-TEST-002",
+            sourceAssetId="M-204",
+            targetAssetId="P-204",
+            relationType="drives",
+        )
+        self.assertIsNone(rel2.description)
+        self.assertEqual(rel2.relation_type, "drives")
+
+        # 3. Monitored by relationship with description=None
+        rel3 = AssetRelationship(
+            id="REL-TEST-003",
+            sourceAssetId="P-204",
+            targetAssetId="PLC-204",
+            relationType="monitored by",
+            description=None,
+        )
+        self.assertIsNone(rel3.description)
+        self.assertEqual(rel3.relation_type, "monitored by")
+
+        # 4. IncidentService returns all incident relationships with description=None
+        rels = IncidentService.get_asset_relationships("INC-2026-001")
+        self.assertGreaterEqual(len(rels), 3)
+        for r in rels:
+            self.assertIsInstance(r, AssetRelationship)
+            self.assertIsNone(r.description)
+            self.assertIn(r.relation_type, ["powers", "drives", "monitored by"])
+
 
 if __name__ == "__main__":
     unittest.main()

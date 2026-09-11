@@ -23,7 +23,7 @@ class AssetRelationship(BaseModel):
     source_asset_id: str = Field(..., alias="sourceAssetId")
     target_asset_id: str = Field(..., alias="targetAssetId")
     relation_type: str = Field(..., alias="relationType")  # powers, drives, monitored by, supplies, controls
-    description: str
+    description: Optional[str] = None
 
     class Config:
         populate_by_name = True
