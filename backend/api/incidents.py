@@ -18,6 +18,11 @@ from backend.vector.models import (
     VectorSyncResponse,
 )
 from backend.vector.service import get_vector_index_service, VectorServiceError
+from backend.schemas.hybrid_search import HybridSearchRequest, HybridSearchResponse
+from backend.services.hybrid_retrieval_service import (
+    get_hybrid_retrieval_service,
+    HybridRetrievalError,
+)
 
 router = APIRouter(prefix="/incidents", tags=["Incidents"])
 
@@ -255,6 +260,35 @@ def semantic_search_evidence(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to execute semantic evidence retrieval.",
+        )
+
+
+@router.post(
+    "/{incident_id}/search/hybrid",
+    response_model=HybridSearchResponse,
+    summary="Deterministic hybrid evidence retrieval and context enrichment",
+)
+def search_hybrid_evidence(
+    incident_id: str,
+    payload: HybridSearchRequest,
+) -> HybridSearchResponse:
+    """Perform deterministic hybrid evidence retrieval combining semantic, lexical, graph, and temporal context."""
+    try:
+        service = get_hybrid_retrieval_service()
+        res = service.search_hybrid(
+            incident_id=incident_id,
+            query=payload.query,
+            top_k=payload.top_k,
+            asset_id=payload.asset_id,
+            source_type=payload.source_type,
+        )
+        return HybridSearchResponse(**res)
+    except HybridRetrievalError as e:
+        raise HTTPException(status_code=e.status_code, detail=e.message)
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to execute hybrid evidence retrieval.",
         )
 
 

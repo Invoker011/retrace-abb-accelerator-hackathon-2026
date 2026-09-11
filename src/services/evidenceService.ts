@@ -1,5 +1,5 @@
 import { mockEvidence } from '../data/mockData';
-import { Evidence, EvidenceCategory, UploadedEvidenceItem } from '../types';
+import { Evidence, EvidenceCategory, UploadedEvidenceItem, HybridSearchRequest, HybridSearchResponse } from '../types';
 import { apiClient } from './apiClient';
 
 const mapEvidence = (data: any): Evidence => ({
@@ -89,6 +89,25 @@ export const evidenceService = {
         e.sourceType.toLowerCase().includes(q) ||
         e.originalEvidenceRef.toLowerCase().includes(q)
     );
+  },
+
+  /**
+   * Deterministic hybrid retrieval combining semantic search, exact keyword matching,
+   * bounded Neo4j context expansion, and chronological temporal sequencing.
+   */
+  async searchHybrid(
+    incidentId: string,
+    payload: HybridSearchRequest
+  ): Promise<HybridSearchResponse> {
+    try {
+      return await apiClient.post<HybridSearchResponse>(
+        `/api/incidents/${incidentId}/search/hybrid`,
+        payload
+      );
+    } catch (err) {
+      console.warn(`[RETRACE] Hybrid search API returned error, falling back:`, err);
+      throw err;
+    }
   },
 
   /**

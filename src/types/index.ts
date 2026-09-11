@@ -163,3 +163,63 @@ export interface UploadedEvidenceItem {
   metadata?: Record<string, any>;
 }
 
+export interface HybridEvidenceResult {
+  rank: number;
+  retrieval_score: number;
+  retrieval_channels: string[];
+  semantic_rank?: number | null;
+  similarity_score?: number | null;
+  keyword_rank?: number | null;
+  keyword_score?: number | null;
+  evidence_id: string;
+  chunk_id: string;
+  asset_id?: string | null;
+  filename: string;
+  source_type: string;
+  text: string;
+  timestamp?: string | null;
+  provenance: Record<string, any>;
+}
+
+export interface HybridSearchRequest {
+  query: string;
+  top_k?: number;
+  asset_id?: string | null;
+  source_type?: string | null;
+}
+
+export interface HybridTemporalContextItem {
+  event_id: string;
+  timestamp: string;
+  relative_seconds?: number | null;
+  asset_id: string;
+  title: string;
+  event_type: string;
+  severity: string;
+  evidence_id?: string | null;
+}
+
+export interface HybridSearchResponse {
+  incident_id: string;
+  query: string;
+  recognized_identifiers: string[];
+  evidence: HybridEvidenceResult[];
+  graph_context: {
+    assets: Array<{
+      id: string;
+      name: string;
+      type: string;
+      criticality?: string;
+      status?: string;
+    }>;
+    relationships: Array<{
+      source: string;
+      target: string;
+      relationship: string;
+      description?: string;
+    }>;
+  };
+  temporal_context: HybridTemporalContextItem[];
+}
+
+
