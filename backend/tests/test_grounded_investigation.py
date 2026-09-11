@@ -673,6 +673,84 @@ class TestGroundedInvestigationReasoning(unittest.TestCase):
             self.assertEqual(response.findings[0].evidence_ids, ["EVD-001"])
             self.assertEqual(len(response.sources_used), 2)
 
+    # 34. Safe event noun regressions (must pass safety validation without false positives)
+    def test_34_safe_event_noun_regressions_pass_safety_validation(self):
+        svc = GroundedInvestigationService()
+        allowed_ast = {"VFD-204", "P-204", "M-204"}
+
+        safe_checks = [
+            (
+                "Perform a detailed analysis of VFD-204's overcurrent warning and motor current trends leading up to the trip.",
+                "Evaluate electrical and operational trends prior to shutdown event.",
+                ["VFD-204", "M-204"],
+            ),
+            (
+                "Analyze the VFD overcurrent warning leading up to the trip.",
+                "Investigate alarm telemetry sequence preceding drive trip.",
+                ["VFD-204"],
+            ),
+            (
+                "Review the shutdown sequence.",
+                "Audit safety logic timing across events.",
+                [],
+            ),
+            (
+                "Inspect the pump after the trip.",
+                "Verify mechanical condition and impeller clearance following the trip event.",
+                ["P-204"],
+            ),
+            (
+                "Compare motor current before shutdown.",
+                "Assess baseline load compared to trip threshold.",
+                ["M-204"],
+            ),
+            (
+                "Review the interlock event history.",
+                "Examine interlock transition logs during incident window.",
+                [],
+            ),
+        ]
+
+        for check_text, reason_text, assets in safe_checks:
+            check_obj = RawGeminiRecommendedCheck(
+                check=check_text,
+                reason=reason_text,
+                related_asset_ids=assets,
+            )
+            validated = svc.validate_recommended_check(check_obj, allowed_ast)
+            self.assertEqual(validated.check, check_text, f"Failed to preserve valid check: {check_text}")
+
+    # 35. Unsafe actuation command regressions (must fail safety validation)
+    def test_35_unsafe_actuation_commands_fail_safety_validation(self):
+        svc = GroundedInvestigationService()
+        allowed_ast = {"VFD-204", "P-204", "M-204"}
+
+        unsafe_checks = [
+            "Reset VFD-204.",
+            "Start P-204.",
+            "Stop M-204.",
+            "Restart the pump.",
+            "Bypass the interlock.",
+            "Override the PLC shutdown.",
+            "Disable the alarm.",
+            "Enable the drive.",
+            "Energize the motor.",
+            "Clear the trip and restart the pump.",
+            "Modify the safety logic.",
+        ]
+
+        for unsafe_text in unsafe_checks:
+            check_obj = RawGeminiRecommendedCheck(
+                check=unsafe_text,
+                reason="Direct equipment intervention or override attempt.",
+                related_asset_ids=["VFD-204", "P-204", "M-204"],
+            )
+            with self.assertRaises(
+                InvestigationSafetyError,
+                msg=f"Expected InvestigationSafetyError for unsafe command: '{unsafe_text}'",
+            ):
+                svc.validate_recommended_check(check_obj, allowed_ast)
+
 
 if __name__ == "__main__":
     unittest.main()

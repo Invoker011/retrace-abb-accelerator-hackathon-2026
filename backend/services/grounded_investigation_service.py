@@ -81,12 +81,41 @@ Provide advisory investigation support only."""
 
 # Prohibited actuation patterns in recommended checks
 FORBIDDEN_ACTUATION_PATTERNS = [
-    re.compile(r"\b(?:reset|re-set)\b.*\b(?:vfd|drive|inverter|alarm|fault|relay|breaker)\b", re.IGNORECASE),
-    re.compile(r"\b(?:bypass|override|disable|suppress|silence)\b.*\b(?:interlock|safety|alarm|trip|switch|guard|permissive)\b", re.IGNORECASE),
-    re.compile(r"\b(?:energize|de-energize|re-energize|power on|power off)\b", re.IGNORECASE),
-    re.compile(r"\b(?:modify|alter|reprogram|change|edit|force)\b.*\b(?:plc|logic|ladder|code|i/o|io|setpoint|firmware)\b", re.IGNORECASE),
-    re.compile(r"\b(?:start|stop|restart|run|spin up|turn on|turn off|shut down|shutdown|trip)\b.*\b(?:machinery|machine|pump|motor|drive|vfd|compressor|agitator|valve|turbine|generator)\b", re.IGNORECASE),
-    re.compile(r"\b(?:open|close|stroke|actuate|throttle)\b.*\bvalve\b", re.IGNORECASE),
+    # 1. Reset/clear commands targeting equipment, drives, faults, trips, alarms, relays, breakers, or asset tags
+    re.compile(
+        r"\b(?:reset|re-set|clear|acknowledge)\b(?:\s+(?:the|an?|this|that|all)\b|\s+)*(?:[a-z0-9_-]+\s+)?(?:vfd|drive|inverter|alarm|fault|relay|breaker|trip|lockout|latch|[a-z0-9]+-[0-9]+)\b",
+        re.IGNORECASE,
+    ),
+    # 2. Bypass/override/disable/suppress safety functions, interlocks, alarms, trips, or shutdowns
+    re.compile(
+        r"\b(?:bypass|override|disable|suppress|silence|defeat|jump)\b(?:\s+(?:the|an?|this|that|all)\b|\s+)*(?:[a-z0-9_-]+\s+)?(?:interlock|safety|alarm|trip|switch|guard|permissive|shutdown|cut-?off)\b",
+        re.IGNORECASE,
+    ),
+    # 3. Direct machinery / equipment start, stop, restart, enable, energize commands
+    re.compile(
+        r"\b(?:start|stop|restart|spin\s+up|turn\s+(?:on|off)|power\s+(?:on|off)|energize|de-energize|re-energize|enable)\b(?:\s+(?:the|an?|this|that|all)\b|\s+)*(?:[a-z0-9_-]+\s+)?(?:machinery|machine|pump|motor|drive|vfd|inverter|compressor|agitator|turbine|generator|equipment|[a-z0-9]+-[0-9]+)\b",
+        re.IGNORECASE,
+    ),
+    # 4. Direct machinery shutdown command (excluding event noun phrases like "shutdown sequence", "before shutdown", etc.)
+    re.compile(
+        r"\bshut\s*down\b(?:\s+(?:the|an?|this|that)\b|\s+)*(?!sequence|event|history|log|procedure|protocol|interlock|system|condition|state|report|file|data)(?:machinery|machine|pump|motor|drive|vfd|inverter|compressor|agitator|turbine|generator|equipment|[a-z0-9]+-[0-9]+)\b",
+        re.IGNORECASE,
+    ),
+    # 5. Direct imperative machinery trip command (excluding event noun usages like "the trip", "after the trip", "leading up to the trip")
+    re.compile(
+        r"\b(?:manually\s+)?trip\s+(?:the\s+|an?\s+|this\s+)?(?:breaker|relay|drive|vfd|pump|motor|machine|machinery|permissive|interlock|[a-z0-9]+-[0-9]+)\b",
+        re.IGNORECASE,
+    ),
+    # 6. PLC / ladder / safety logic / setpoint modification
+    re.compile(
+        r"\b(?:modify|alter|reprogram|change|edit|force|reconfigure|overwrite)\b(?:\s+(?:the|an?|this|that)\b|\s+)*(?:[a-z0-9_-]+\s+)?(?:plc|logic|ladder|code|i/o|io|setpoint|firmware|safety\s+logic|safety\s+settings?|interlock\s+logic)\b",
+        re.IGNORECASE,
+    ),
+    # 7. Physical valve stroke / open / close actuation commands
+    re.compile(
+        r"\b(?:open|close|stroke|actuate|throttle)\b(?:\s+(?:the|an?|this|that)\b|\s+)*(?:[a-z0-9_-]+\s+)?valve\b",
+        re.IGNORECASE,
+    ),
 ]
 
 # Phrases that claim definitive unproven causation (forbidden in CORRELATED and HYPOTHESIS findings)
