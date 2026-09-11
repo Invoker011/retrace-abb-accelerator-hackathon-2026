@@ -23,6 +23,11 @@ from backend.services.hybrid_retrieval_service import (
     get_hybrid_retrieval_service,
     HybridRetrievalError,
 )
+from backend.schemas.investigation import InvestigationRequest, InvestigationResponse
+from backend.services.grounded_investigation_service import (
+    get_grounded_investigation_service,
+    GroundedInvestigationError,
+)
 
 router = APIRouter(prefix="/incidents", tags=["Incidents"])
 
@@ -310,5 +315,30 @@ def sync_incident_vectors(incident_id: str) -> VectorSyncResponse:
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to synchronize incident vectors.",
         )
+
+
+@router.post(
+    "/{incident_id}/investigate",
+    response_model=InvestigationResponse,
+    summary="Evidence-grounded multimodal industrial investigation reasoning",
+)
+def investigate_incident(
+    incident_id: str,
+    payload: InvestigationRequest,
+) -> InvestigationResponse:
+    """Execute evidence-grounded industrial incident investigation using hybrid retrieval and Gemini reasoning."""
+    try:
+        service = get_grounded_investigation_service()
+        return service.investigate(incident_id=incident_id, request=payload)
+    except GroundedInvestigationError as e:
+        raise HTTPException(status_code=e.status_code, detail=e.message)
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to complete grounded incident investigation.",
+        )
+
 
 

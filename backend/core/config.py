@@ -71,4 +71,13 @@ class Settings:
     EMBEDDING_MODEL: str = os.getenv("EMBEDDING_MODEL", "").strip() or "gemini-embedding-001"
     EMBEDDING_DIMENSION: int = int(os.getenv("EMBEDDING_DIMENSION", "768"))
 
+    # Vertex AI Reasoning Model Settings (Multimodal Industrial Investigation)
+    REASONING_MODEL: str = os.getenv("REASONING_MODEL", "").strip() or "gemini-2.5-flash"
+    REASONING_LOCATION: str = (
+        os.getenv("REASONING_LOCATION", "").strip()
+        or os.getenv("GOOGLE_CLOUD_LOCATION", "").strip()
+        or os.getenv("GOOGLE_CLOUD_REGION", "").strip()
+        or "us-central1"
+    )
+
 settings = Settings()
