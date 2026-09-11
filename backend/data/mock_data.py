@@ -136,21 +136,21 @@ MOCK_ASSET_RELATIONSHIPS: List[Dict[str, Any]] = [
         "sourceAssetId": "VFD-204",
         "targetAssetId": "M-204",
         "relationType": "powers",
-        "description": "VFD-204 provides 3-phase modulated AC power and speed regulation to Motor M-204.",
+        "description": None,
     },
     {
         "id": "REL-002",
         "sourceAssetId": "M-204",
         "targetAssetId": "P-204",
         "relationType": "drives",
-        "description": "Motor M-204 transmits rotational mechanical torque to Pump P-204 via flex-element coupling.",
+        "description": None,
     },
     {
         "id": "REL-003",
         "sourceAssetId": "P-204",
         "targetAssetId": "PLC-204",
         "relationType": "monitored by",
-        "description": "Pump P-204 suction/discharge pressure transmitters and vibration probes feed PLC-204 analog rack.",
+        "description": None,
     },
 ]
 
@@ -165,10 +165,7 @@ MOCK_TIMELINE_EVENTS: List[Dict[str, Any]] = [
         "assetName": "VFD-204",
         "eventType": "warning",
         "title": "VFD-204 Overcurrent Warning",
-        "description": (
-            "Inverter internal protection triggered warning code W-2310 (Instantaneous Overcurrent). "
-            "Current peaked at 268.4 A (109% of rated threshold) for 480ms."
-        ),
+        "description": "VFD-204 recorded overcurrent warning W-2310 with current 268.4 A.",
         "evidenceId": "EVD-001",
         "evidenceRef": "VFD_204_Log.csv (Row 4209)",
         "severity": "Medium",
@@ -176,8 +173,8 @@ MOCK_TIMELINE_EVENTS: List[Dict[str, Any]] = [
             "currentA": 268.4,
             "voltageV": 398.2,
             "frequencyHz": 48.6,
-            "rpm": 1458,
             "alarmCode": "W-2310",
+            "state": "WARN",
         },
     },
     {
@@ -190,17 +187,15 @@ MOCK_TIMELINE_EVENTS: List[Dict[str, Any]] = [
         "assetName": "Motor M-204",
         "eventType": "deviation",
         "title": "Motor M-204 Current Deviation",
-        "description": (
-            "Motor winding current showed uncharacteristic phase imbalance of 8.2% and torque "
-            "ripple deviation while maintaining synchronous speed."
-        ),
+        "description": "Historian recorded Motor M-204 power at 118.2 kW with vibration 3.4 mm/s.",
         "evidenceId": "EVD-003",
-        "evidenceRef": "Historian_P204.csv (Tag M204_IL1..L3)",
+        "evidenceRef": "Historian_P204.csv (Tag M204_KW)",
         "severity": "Medium",
         "telemetrySnapshot": {
-            "currentA": 252.1,
-            "rpm": 1442,
-            "vibrationMmS": 3.8,
+            "motorPowerKw": 118.2,
+            "vibrationMmS": 3.4,
+            "headBar": 6.74,
+            "flowM3h": 310.2,
         },
     },
     {
@@ -213,17 +208,15 @@ MOCK_TIMELINE_EVENTS: List[Dict[str, Any]] = [
         "assetName": "Pump P-204",
         "eventType": "disturbance",
         "title": "Pump P-204 Flow/Pressure Disturbance",
-        "description": (
-            "Discharge manifold pressure fluctuated between 6.8 bar and 4.2 bar with erratic flow "
-            "decay from 315 m³/h to 240 m³/h."
-        ),
+        "description": "Historian recorded sudden discharge pressure drop from 6.8 bar to 4.2 bar with flow decreasing to 241.0 m³/h.",
         "evidenceId": "EVD-003",
         "evidenceRef": "Historian_P204.csv (Tag P204_PT_DISCH)",
         "severity": "High",
         "telemetrySnapshot": {
-            "pressureBar": 4.6,
-            "rpm": 1410,
-            "vibrationMmS": 5.9,
+            "headBar": 4.20,
+            "flowM3h": 241.0,
+            "motorPowerKw": 122.1,
+            "vibrationMmS": 6.7,
         },
     },
     {
@@ -236,16 +229,13 @@ MOCK_TIMELINE_EVENTS: List[Dict[str, Any]] = [
         "assetName": "Pump P-204",
         "eventType": "observation",
         "title": "Technician Reports Abnormal Vibration",
-        "description": (
-            "Field operator noted auditory high-pitch cavitation-like screech and visible axial "
-            "vibration at skid baseplate during walkdown."
-        ),
+        "description": "Technician reported high-pitched gravel-like rattling sound and baseplate shudder on Pump P-204 with suction gauge reading 0.8 bar (normal 1.6 bar).",
         "evidenceId": "EVD-006",
         "evidenceRef": "Technician_Observation_001 (Shift Log R-44)",
         "severity": "High",
         "telemetrySnapshot": {
-            "vibrationMmS": 8.4,
-            "pressureBar": 4.1,
+            "suctionPressureBar": 0.8,
+            "normalSuctionPressureBar": 1.6,
         },
     },
     {
@@ -258,19 +248,15 @@ MOCK_TIMELINE_EVENTS: List[Dict[str, Any]] = [
         "assetName": "PLC-204",
         "eventType": "alarm",
         "title": "PLC / SCADA Pump Shutdown Alarm",
-        "description": (
-            "Safety interlock logic tripped on combined high vibration (>7.1 mm/s threshold exceeded "
-            "for 3000ms) and low discharge head. Initiated emergency de-energization."
-        ),
+        "description": "SCADA alarm ALM-P204-TRIP-VIB triggered with vibration 9.2 mm/s and interlock 04-SHUTDOWN asserted.",
         "evidenceId": "EVD-002",
         "evidenceRef": "SCADA_Alarm_Log.csv (Seq #88310)",
         "severity": "Critical",
         "telemetrySnapshot": {
             "alarmCode": "ALM-P204-TRIP-VIB",
-            "pressureBar": 1.1,
             "vibrationMmS": 9.2,
-            "currentA": 0.0,
-            "rpm": 0,
+            "interlock": "04-SHUTDOWN",
+            "alarmId": "88310",
         },
     },
 ]
