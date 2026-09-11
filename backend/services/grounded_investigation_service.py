@@ -66,11 +66,20 @@ CORRELATED
 HYPOTHESIS
 UNKNOWN
 
-Correlation does not prove causation.
+CORRELATED findings:
+- Describe temporal sequence, topology, cross-source agreement, or co-occurrence.
+- MUST NOT imply proven causation. Do not use causal phrases such as 'caused', 'causing', 'led to', 'leading to', 'resulted in', 'resulting in', 'responsible for', 'produced', 'triggered the failure', 'therefore caused'.
+- Prefer non-causal relationship language: 'preceded', 'coincided with', 'occurred before', 'was associated with', 'aligned with', 'correlates with'.
 
-A hypothesis must never be presented as fact.
+HYPOTHESIS findings:
+- Reason only from supplied context.
+- Inferred possibilities must be explicitly uncertain (using 'may', 'might', 'could', 'plausibly').
+- Never introduce external engineering facts, textbook principles, or unsourced domain knowledge into basis fields (e.g., do NOT state 'Cavitation is a known phenomenon that causes...' or 'Overcurrent can be caused by increased mechanical load' unless explicitly stated in retrieved evidence).
+- If evidence is insufficient to confirm a mechanism, explicitly classify the conclusion UNKNOWN.
 
-If evidence is insufficient, classify the conclusion UNKNOWN.
+SUMMARY GROUNDING:
+- Frame the summary strictly by recorded symptoms, alarms, and event sequences (e.g. 'The recorded shutdown was a vibration-trip event preceded by VFD overcurrent, increasing vibration, pressure/flow degradation, and technician-observed rattling.').
+- Never claim an exact or unproven root cause unless an official engineering root-cause report in evidence establishes it.
 
 Do not issue industrial control commands.
 
@@ -130,6 +139,44 @@ FORBIDDEN_CAUSAL_PHRASES = [
     "was the direct cause",
     "undeniably caused",
     "conclusive proof of cause",
+]
+
+# Strict non-causal validation patterns for CORRELATED findings.
+# CORRELATED findings must describe temporal sequence, cross-source agreement,
+# topology relationships, or co-occurrence, but MUST NOT imply or assert causation.
+FORBIDDEN_CORRELATED_CAUSAL_PATTERNS = [
+    re.compile(r"\b(?:caused|causing|therefore\s+caused)\b", re.IGNORECASE),
+    re.compile(r"\b(?:led\s+to|leading\s+to)\b", re.IGNORECASE),
+    re.compile(r"\b(?:resulted\s+in|resulting\s+in)\b", re.IGNORECASE),
+    re.compile(r"\bresponsible\s+for\b", re.IGNORECASE),
+    re.compile(r"\bproduced\b", re.IGNORECASE),
+    re.compile(r"\btriggered\s+(?:the\s+)?failure\b", re.IGNORECASE),
+    re.compile(
+        r"\b(?:definitely\s+caused|proven\s+cause|sole\s+cause|was\s+caused\s+solely\s+by|proves?\s+causation|conclusively\s+caused|established\s+as\s+the\s+cause|direct\s+cause|undeniably\s+caused|conclusive\s+proof\s+of\s+cause)\b",
+        re.IGNORECASE,
+    ),
+]
+
+# Patterns introducing unsourced textbook or external domain theories into HYPOTHESIS basis.
+# Hypotheses must reason strictly from facts present in retrieved RETRACE evidence.
+UNSOURCED_DOMAIN_THEORY_PATTERNS = [
+    re.compile(r"\b(?:is|are)\s+(?:a\s+)?known\s+(?:phenomenon|fact|mechanism|issue|characteristic)\b", re.IGNORECASE),
+    re.compile(r"\bknown\s+to\s+cause\b", re.IGNORECASE),
+    re.compile(r"\bcan\s+be\s+caused\s+by\b", re.IGNORECASE),
+    re.compile(r"\bphenomenon\s+that\s+causes\b", re.IGNORECASE),
+    re.compile(r"\btypically\s+(?:caused\s+by|results?\s+from|causes?)\b", re.IGNORECASE),
+    re.compile(r"\bgenerally\s+(?:caused\s+by|results?\s+from|causes?)\b", re.IGNORECASE),
+    re.compile(r"\bcommon\s+cause\s+of\b", re.IGNORECASE),
+    re.compile(r"\btextbook\s+(?:example|symptom|case|knowledge)\b", re.IGNORECASE),
+]
+
+# Summary root cause assertion patterns (summaries must not assert an unverified root cause)
+FORBIDDEN_SUMMARY_ROOT_CAUSE_PATTERNS = [
+    re.compile(r"\b(?:the\s+)?root\s+cause\s+(?:was|is|has\s+been\s+determined\s+to\s+be|identified\s+as)\b", re.IGNORECASE),
+    re.compile(r"\bconclusively\s+(?:identified|determined|established)\s+as\s+the\s+(?:root\s+)?cause\b", re.IGNORECASE),
+    re.compile(r"\bproven\s+root\s+cause\b", re.IGNORECASE),
+    re.compile(r"\bdefinitive\s+root\s+cause\b", re.IGNORECASE),
+    re.compile(r"\bunderlying\s+root\s+cause\s+is\s+known\b", re.IGNORECASE),
 ]
 
 # Uncertainty keywords required in HYPOTHESIS statements or basis
@@ -351,10 +398,12 @@ Reason exclusively from the factual context provided below.
 
 REASONING INSTRUCTIONS:
 1. Provide a concise 'summary' synthesizing the investigation findings for this query.
+   - Grounding rule: Describe the recorded symptoms, alarms, and sequence of events (e.g. 'The recorded shutdown was a vibration-trip event preceded by VFD overcurrent, increasing vibration, pressure/flow degradation, and technician-observed rattling.').
+   - Do NOT assert an unproven root cause or claim the underlying mechanical root cause is known unless an official engineering root-cause document in evidence explicitly proves it.
 2. Formulate 'findings' where each item is classified into exactly one category:
    - OBSERVED: Facts directly contained in provided evidence or event records. Must cite at least one evidence_id or event_id.
-   - CORRELATED: Relationships supported by timing, asset topology, or cross-source data. Must cite at least two supporting items. Never state correlation as proven cause.
-   - HYPOTHESIS: Plausible explanations inferred from evidence. Must cite supporting evidence and must use explicit uncertainty language (e.g. 'may', 'might', 'could', 'plausibly'). Never present as established fact.
+   - CORRELATED: Relationships supported by timing, asset topology, or cross-source data. Must cite at least two supporting items. Never state correlation as proven cause. Do NOT use causal words ('caused', 'causing', 'led to', 'leading to', 'resulted in', 'resulting in', 'responsible for', 'produced', 'triggered the failure', 'therefore caused'). Use relational language ('preceded', 'coincided with', 'occurred before', 'was associated with', 'aligned with', 'correlates with').
+   - HYPOTHESIS: Plausible explanations inferred from evidence. Must cite supporting evidence and must use explicit uncertainty language (e.g. 'may', 'might', 'could', 'plausibly'). Never present as established fact. Do NOT introduce external textbook or unsourced engineering theories into basis. State UNKNOWN when evidence cannot establish the mechanism.
    - UNKNOWN: Information that cannot currently be determined from available evidence.
 3. For each finding, provide:
    - classification: OBSERVED | CORRELATED | HYPOTHESIS | UNKNOWN
@@ -488,11 +537,13 @@ REASONING INSTRUCTIONS:
                 raise InvestigationValidationError(
                     f"CORRELATED finding '{statement[:60]}' must cite at least two supporting contextual items (evidence/event/asset)."
                 )
-            # Must remain non-causal: do not claim proven cause
-            for causal_phrase in FORBIDDEN_CAUSAL_PHRASES:
-                if causal_phrase in combined_text:
+            # Must remain non-causal: do not claim or imply causation
+            for causal_pat in FORBIDDEN_CORRELATED_CAUSAL_PATTERNS:
+                m = causal_pat.search(combined_text)
+                if m:
                     raise InvestigationValidationError(
-                        f"CORRELATED finding asserts unproven causation ('{causal_phrase}'). Correlation does not prove causation."
+                        f"CORRELATED finding asserts or implies causation ('{m.group(0)}'). "
+                        "CORRELATED findings must describe temporal sequence, cross-source agreement, topology, or co-occurrence (e.g. 'preceded', 'coincided with', 'occurred before', 'was associated with', 'aligned with', 'correlates with') and must not use causal language."
                     )
 
         elif classification == FindingClassification.HYPOTHESIS:
@@ -506,6 +557,14 @@ REASONING INSTRUCTIONS:
                 if causal_phrase in combined_text:
                     raise InvestigationValidationError(
                         f"HYPOTHESIS finding asserts definitive causation ('{causal_phrase}'). Hypotheses must remain tentative."
+                    )
+            # Must not introduce unsupported external domain theories or unsourced textbook facts into basis
+            for unsourced_pat in UNSOURCED_DOMAIN_THEORY_PATTERNS:
+                m = unsourced_pat.search(basis)
+                if m:
+                    raise InvestigationValidationError(
+                        f"HYPOTHESIS basis introduces unsourced domain or textbook theory ('{m.group(0)}'). "
+                        "Hypotheses may infer possibilities consistent with observed symptoms, but their basis must reference only facts contained in retrieved RETRACE evidence. If the mechanism cannot be established from evidence, state UNKNOWN."
                     )
             # Must use uncertainty language
             has_uncertainty = any(word in combined_text for word in UNCERTAINTY_INDICATORS)
@@ -572,6 +631,33 @@ REASONING INSTRUCTIONS:
             reason=reason_text,
             related_asset_ids=ast_ids,
         )
+
+    def validate_summary(
+        self,
+        summary: str,
+        retrieval_result: Optional[Dict[str, Any]] = None,
+    ) -> str:
+        """Validate that summary wording does not claim an unsupported root cause unless confirmed in evidence."""
+        if not summary or not summary.strip():
+            return "Investigation assessment complete."
+        summary_clean = summary.strip()
+        for pattern in FORBIDDEN_SUMMARY_ROOT_CAUSE_PATTERNS:
+            match = pattern.search(summary_clean)
+            if match:
+                # Allow if retrieved evidence explicitly contains an official RCA or root-cause report
+                has_rca_doc = False
+                if retrieval_result:
+                    for ev in retrieval_result.get("evidence", []):
+                        text = (ev.get("text") or "").lower()
+                        if "root cause analysis" in text or "rca report" in text or "official incident report" in text:
+                            has_rca_doc = True
+                            break
+                if not has_rca_doc:
+                    raise InvestigationValidationError(
+                        f"Summary claims an unverified or unsupported root cause ('{match.group(0)}'). "
+                        "Summaries must describe recorded symptoms, alarms, and temporal sequences without claiming an unverified mechanical root cause."
+                    )
+        return summary_clean
 
     def investigate(
         self,
@@ -707,8 +793,15 @@ REASONING INSTRUCTIONS:
         # 9. Format sources_used strictly from retrieved evidence
         sources_used: List[EvidenceCitation] = []
         for ev in retrieval_result.get("evidence", []):
-            prov = ev.get("provenance", {})
-            orig_ref = prov.get("source") or prov.get("section") or prov.get("original_filename")
+            prov = ev.get("provenance") or {}
+            orig_ref = (
+                prov.get("original_reference")
+                or prov.get("source")
+                or prov.get("section")
+                or prov.get("original_filename")
+            )
+            if orig_ref is not None:
+                orig_ref = str(orig_ref).strip() or None
             sources_used.append(
                 EvidenceCitation(
                     evidence_id=ev["evidence_id"],
@@ -722,7 +815,7 @@ REASONING INSTRUCTIONS:
             )
 
         # 10. Assemble complete response
-        summary_clean = raw_output.summary.strip() if raw_output.summary else "Investigation assessment complete."
+        summary_clean = self.validate_summary(raw_output.summary, retrieval_result)
         unknowns_clean = [str(u).strip() for u in (raw_output.unknowns or []) if str(u).strip()]
 
         response = InvestigationResponse(

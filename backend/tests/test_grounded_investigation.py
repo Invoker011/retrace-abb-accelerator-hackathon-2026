@@ -751,6 +751,289 @@ class TestGroundedInvestigationReasoning(unittest.TestCase):
             ):
                 svc.validate_recommended_check(check_obj, allowed_ast)
 
+    # 36. CORRELATED rejects "leading to the shutdown"
+    def test_36_correlated_rejects_leading_to_the_shutdown(self):
+        svc = GroundedInvestigationService()
+        allowed_ev = {"EVD-001", "EVD-002"}
+        allowed_evt = {"EVT-001"}
+        allowed_ast = {"P-204"}
+
+        finding = RawGeminiFinding(
+            classification="CORRELATED",
+            statement="The high vibration levels recorded by the historian exceeded the pump's dangerous trip threshold, leading to the shutdown.",
+            basis="Observed across telemetry EVD-001 and event EVT-001.",
+            evidence_ids=["EVD-001", "EVD-002"],
+            event_ids=["EVT-001"],
+            asset_ids=["P-204"],
+        )
+        with self.assertRaises(InvestigationValidationError) as ctx:
+            svc.validate_finding(finding, allowed_ev, allowed_evt, allowed_ast)
+        self.assertIn("causation", str(ctx.exception).lower())
+
+    # 37. CORRELATED rejects "resulted in failure"
+    def test_37_correlated_rejects_resulted_in_failure(self):
+        svc = GroundedInvestigationService()
+        allowed_ev = {"EVD-001", "EVD-002"}
+        allowed_evt = {"EVT-001"}
+        allowed_ast = {"M-204"}
+
+        finding = RawGeminiFinding(
+            classification="CORRELATED",
+            statement="VFD overcurrent warning coincided with temperature elevation and resulted in failure of the motor.",
+            basis="Correlated timing across EVD-001 and EVD-002.",
+            evidence_ids=["EVD-001", "EVD-002"],
+            event_ids=["EVT-001"],
+            asset_ids=["M-204"],
+        )
+        with self.assertRaises(InvestigationValidationError) as ctx:
+            svc.validate_finding(finding, allowed_ev, allowed_evt, allowed_ast)
+        self.assertIn("causation", str(ctx.exception).lower())
+
+    # 38. CORRELATED accepts "preceded the shutdown"
+    def test_38_correlated_accepts_preceded_the_shutdown(self):
+        svc = GroundedInvestigationService()
+        allowed_ev = {"EVD-001", "EVD-002"}
+        allowed_evt = {"EVT-001"}
+        allowed_ast = {"P-204"}
+
+        finding = RawGeminiFinding(
+            classification="CORRELATED",
+            statement="The high vibration levels recorded by the historian exceeded the pump's trip threshold, preceded the shutdown.",
+            basis="Observed temporal sequence across EVD-001 and EVD-002.",
+            evidence_ids=["EVD-001", "EVD-002"],
+            event_ids=["EVT-001"],
+            asset_ids=["P-204"],
+        )
+        validated = svc.validate_finding(finding, allowed_ev, allowed_evt, allowed_ast)
+        self.assertEqual(validated.classification, FindingClassification.CORRELATED)
+
+    # 39. CORRELATED accepts "correlated with the shutdown"
+    def test_39_correlated_accepts_correlated_with_the_shutdown(self):
+        svc = GroundedInvestigationService()
+        allowed_ev = {"EVD-001", "EVD-002"}
+        allowed_evt = {"EVT-001"}
+        allowed_ast = {"VFD-204"}
+
+        finding = RawGeminiFinding(
+            classification="CORRELATED",
+            statement="Elevated motor temperature correlated with the shutdown timing recorded in SCADA logs.",
+            basis="Temporal alignment between EVD-001 and EVD-002 logs.",
+            evidence_ids=["EVD-001", "EVD-002"],
+            event_ids=["EVT-001"],
+            asset_ids=["VFD-204"],
+        )
+        validated = svc.validate_finding(finding, allowed_ev, allowed_evt, allowed_ast)
+        self.assertEqual(validated.classification, FindingClassification.CORRELATED)
+
+    # 40. Hypothesis basis does not introduce unsupported causal/domain facts
+    def test_40_hypothesis_basis_does_not_introduce_unsupported_causal_domain_facts(self):
+        svc = GroundedInvestigationService()
+        allowed_ev = {"EVD-001"}
+        allowed_evt = set()
+        allowed_ast = {"P-204"}
+
+        # Disallowed unsourced textbook / general theory facts in basis
+        unsourced_bases = [
+            "Cavitation is a known phenomenon that causes rattling, increased vibration, and impeller wear.",
+            "An overcurrent can be caused by increased mechanical load on the motor.",
+            "Cavitation is known to cause severe pitting and erosion.",
+            "This typically causes fluid flow degradation.",
+        ]
+
+        for unsourced in unsourced_bases:
+            finding = RawGeminiFinding(
+                classification="HYPOTHESIS",
+                statement="The pump may have suffered cavitation during operation.",
+                basis=unsourced,
+                evidence_ids=["EVD-001"],
+                event_ids=[],
+                asset_ids=["P-204"],
+            )
+            with self.assertRaises(
+                InvestigationValidationError,
+                msg=f"Expected InvestigationValidationError for unsourced basis: '{unsourced}'",
+            ):
+                svc.validate_finding(finding, allowed_ev, allowed_evt, allowed_ast)
+
+        # Allowed: Inferred possibilities referencing only retrieved evidence symptoms
+        allowed_finding = RawGeminiFinding(
+            classification="HYPOTHESIS",
+            statement="The combination of low suction pressure, rattling, increasing vibration and reduced flow could be consistent with a suction-side or mechanical problem.",
+            basis="Supported by EVD-001 vibration trend. The current evidence does not confirm the mechanism.",
+            evidence_ids=["EVD-001"],
+            event_ids=[],
+            asset_ids=["P-204"],
+        )
+        validated = svc.validate_finding(allowed_finding, allowed_ev, allowed_evt, allowed_ast)
+        self.assertEqual(validated.classification, FindingClassification.HYPOTHESIS)
+
+    # 41. UNKNOWN remains valid when mechanism is not established
+    def test_41_unknown_remains_valid_when_mechanism_is_not_established(self):
+        svc = GroundedInvestigationService()
+        allowed_ev = {"EVD-001"}
+        allowed_evt = set()
+        allowed_ast = {"P-204"}
+
+        finding = RawGeminiFinding(
+            classification="UNKNOWN",
+            statement="The physical root-cause initiation mechanism cannot be established from available evidence.",
+            basis="No internal visual inspection or teardown records exist for pump P-204 prior to 10:14.",
+            evidence_ids=[],
+            event_ids=[],
+            asset_ids=[],
+        )
+        validated = svc.validate_finding(finding, allowed_ev, allowed_evt, allowed_ast)
+        self.assertEqual(validated.classification, FindingClassification.UNKNOWN)
+        self.assertEqual(validated.evidence_ids, [])
+
+    # 42. sources_used uses provenance.original_reference
+    def test_42_sources_used_uses_provenance_original_reference(self):
+        valid_llm_json = {
+            "summary": "The recorded shutdown was a vibration-trip event preceded by VFD overcurrent.",
+            "findings": [
+                {
+                    "classification": "OBSERVED",
+                    "statement": "Operator logged rattling sounds.",
+                    "basis": "Documented in EVD-006.",
+                    "evidence_ids": ["EVD-006"],
+                    "event_ids": [],
+                    "asset_ids": ["P-204"],
+                }
+            ],
+            "unknowns": [],
+            "recommended_checks": [],
+        }
+        mock_client = MagicMock()
+        mock_response = MagicMock()
+        mock_response.text = json.dumps(valid_llm_json)
+        mock_client.models.generate_content.return_value = mock_response
+
+        mock_hybrid = MagicMock(spec=HybridRetrievalService)
+        retrieval_with_provenance = {
+            "incident_id": self.incident_id,
+            "query": "What did the operator observe?",
+            "top_k": 5,
+            "evidence": [
+                {
+                    "evidence_id": "EVD-006",
+                    "chunk_id": "EVD-006-chk-0",
+                    "asset_id": "P-204",
+                    "filename": "Operator_Shift_Handover.pdf",
+                    "source_type": "Technician Notes and Inspection Records",
+                    "text": "Rattling heard near pump casing.",
+                    "timestamp": "2026-09-08T10:14:00Z",
+                    "provenance": {
+                        "source": "Operations Shift Handover Log & Mobile Note",
+                        "original_reference": "Shift Mobile Entry #LOG-20260908-1014, Operator J. Miller (Area 2 Rover)",
+                    },
+                }
+            ],
+            "graph_context": {"assets": [{"id": "P-204"}], "relationships": [], "evidence_nodes": []},
+            "temporal_context": [],
+            "recognized_identifiers": ["P-204"],
+        }
+        mock_hybrid.search_hybrid.return_value = retrieval_with_provenance
+
+        svc = GroundedInvestigationService(hybrid_retrieval_service=mock_hybrid, client=mock_client)
+        req = InvestigationRequest(query="What did the operator observe?", top_k=5)
+        res = svc.investigate(self.incident_id, req)
+
+        self.assertEqual(len(res.sources_used), 1)
+        self.assertEqual(
+            res.sources_used[0].original_reference,
+            "Shift Mobile Entry #LOG-20260908-1014, Operator J. Miller (Area 2 Rover)",
+        )
+
+    # 43. Fallback source mapping works when original_reference is absent
+    def test_43_fallback_source_mapping_works_when_original_reference_is_absent(self):
+        valid_llm_json = {
+            "summary": "The recorded shutdown was a vibration-trip event preceded by VFD overcurrent.",
+            "findings": [
+                {
+                    "classification": "OBSERVED",
+                    "statement": "VFD fault registered.",
+                    "basis": "Documented in EVD-001.",
+                    "evidence_ids": ["EVD-001"],
+                    "event_ids": [],
+                    "asset_ids": ["VFD-204"],
+                }
+            ],
+            "unknowns": [],
+            "recommended_checks": [],
+        }
+        mock_client = MagicMock()
+        mock_response = MagicMock()
+        mock_response.text = json.dumps(valid_llm_json)
+        mock_client.models.generate_content.return_value = mock_response
+
+        mock_hybrid = MagicMock(spec=HybridRetrievalService)
+        retrieval_without_orig_ref = {
+            "incident_id": self.incident_id,
+            "query": "What fault occurred?",
+            "top_k": 5,
+            "evidence": [
+                {
+                    "evidence_id": "EVD-001",
+                    "chunk_id": "EVD-001-chk-0",
+                    "asset_id": "VFD-204",
+                    "filename": "VFD_204_Fault_Log.csv",
+                    "source_type": "VFD / Drive Logs",
+                    "text": "Overcurrent trip registered.",
+                    "timestamp": "2026-09-08T10:14:01Z",
+                    "provenance": {
+                        "source": "Operations Shift Handover Log & Mobile Note",
+                        # original_reference intentionally absent
+                    },
+                }
+            ],
+            "graph_context": {"assets": [{"id": "VFD-204"}], "relationships": [], "evidence_nodes": []},
+            "temporal_context": [],
+            "recognized_identifiers": ["VFD-204"],
+        }
+        mock_hybrid.search_hybrid.return_value = retrieval_without_orig_ref
+
+        svc = GroundedInvestigationService(hybrid_retrieval_service=mock_hybrid, client=mock_client)
+        req = InvestigationRequest(query="What fault occurred?", top_k=5)
+        res = svc.investigate(self.incident_id, req)
+
+        self.assertEqual(len(res.sources_used), 1)
+        self.assertEqual(
+            res.sources_used[0].original_reference,
+            "Operations Shift Handover Log & Mobile Note",
+        )
+
+    # 44. Summary does not claim unsupported root cause
+    def test_44_summary_does_not_claim_unsupported_root_cause(self):
+        svc = GroundedInvestigationService()
+        sample_retrieval = {
+            "evidence": [
+                {
+                    "evidence_id": "EVD-001",
+                    "text": "VFD output current spiked to 142A followed by emergency trip.",
+                }
+            ]
+        }
+
+        # Unsupported root cause claims must be rejected
+        unsupported_summaries = [
+            "The root cause was determined to be cavitation due to operator error.",
+            "The root cause is bearing fatigue failure.",
+            "Cavitation was conclusively identified as the root cause of the incident.",
+            "The underlying root cause is known to be impeller detachment.",
+        ]
+
+        for bad_summary in unsupported_summaries:
+            with self.assertRaises(
+                InvestigationValidationError,
+                msg=f"Expected InvestigationValidationError for unsupported summary: '{bad_summary}'",
+            ):
+                svc.validate_summary(bad_summary, sample_retrieval)
+
+        # Grounded symptom/sequence summary must pass
+        good_summary = "The recorded shutdown was a vibration-trip event preceded by VFD overcurrent, increasing vibration, pressure/flow degradation, and technician-observed rattling."
+        validated = svc.validate_summary(good_summary, sample_retrieval)
+        self.assertEqual(validated, good_summary)
+
 
 if __name__ == "__main__":
     unittest.main()
