@@ -1034,6 +1034,96 @@ class TestGroundedInvestigationReasoning(unittest.TestCase):
         validated = svc.validate_summary(good_summary, sample_retrieval)
         self.assertEqual(validated, good_summary)
 
+    # 45. HYPOTHESIS basis rejects "consistent with" and "could contribute to" ungrounded domain theories
+    def test_45_hypothesis_basis_rejects_consistent_with_and_contribute_to(self):
+        svc = GroundedInvestigationService()
+        allowed_ev = {"EVD-006"}
+        allowed_evt = set()
+        allowed_ast = {"P-204"}
+
+        unsupported_live_bases = [
+            "These symptoms are consistent with internal pump issues.",
+            "EVD-006 recorded low suction pressure, which could contribute to cavitation.",
+            "Symptoms are consistent with cavitation and bearing damage.",
+            "The low pressure contributes to cavitation breakdown.",
+        ]
+
+        for bad_basis in unsupported_live_bases:
+            finding = RawGeminiFinding(
+                classification="HYPOTHESIS",
+                statement="The pump could plausibly have suffered internal damage or cavitation.",
+                basis=bad_basis,
+                evidence_ids=["EVD-006"],
+                event_ids=[],
+                asset_ids=["P-204"],
+            )
+            with self.assertRaises(
+                InvestigationValidationError,
+                msg=f"Expected InvestigationValidationError for unsourced basis: '{bad_basis}'",
+            ):
+                svc.validate_finding(finding, allowed_ev, allowed_evt, allowed_ast)
+
+    # 46. HYPOTHESIS accepts explicitly uncertain mechanism with purely evidence-grounded basis
+    def test_46_hypothesis_accepts_purely_evidence_grounded_basis(self):
+        svc = GroundedInvestigationService()
+        allowed_ev = {"EVD-003", "EVD-006"}
+        allowed_evt = set()
+        allowed_ast = {"P-204"}
+
+        finding = RawGeminiFinding(
+            classification="HYPOTHESIS",
+            statement="The combination of low suction pressure, rattling, shudder, and increasing vibration could plausibly indicate a suction-side or internal pump issue.",
+            basis="EVD-006 records 0.8 bar suction pressure, rattling, and shudder at 10:14:18. EVD-003 records vibration increasing to 8.8 mm/s while flow and discharge pressure decreased.",
+            evidence_ids=["EVD-003", "EVD-006"],
+            event_ids=[],
+            asset_ids=["P-204"],
+        )
+        validated = svc.validate_finding(finding, allowed_ev, allowed_evt, allowed_ast)
+        self.assertEqual(validated.classification, FindingClassification.HYPOTHESIS)
+        self.assertIn("could plausibly indicate", validated.statement)
+        self.assertIn("0.8 bar suction pressure", validated.basis)
+
+    # 47. Recommended check reason rejects unsourced domain theories and textbook assertions
+    def test_47_recommended_check_reason_rejects_unsupported_domain_theory(self):
+        svc = GroundedInvestigationService()
+        allowed_ast = {"P-204"}
+
+        bad_reasons = [
+            "These symptoms are consistent with internal pump issues.",
+            "low suction pressure, which could contribute to cavitation",
+            "Cavitation is a known phenomenon that causes impeller damage.",
+            "Vibration is typically caused by bearing degradation.",
+        ]
+
+        for bad_reason in bad_reasons:
+            check = RawGeminiRecommendedCheck(
+                check="Inspect the suction line and strainer ST-204 for blockage or damage.",
+                reason=bad_reason,
+                related_asset_ids=["P-204"],
+            )
+            with self.assertRaises(
+                InvestigationValidationError,
+                msg=f"Expected InvestigationValidationError for bad reason: '{bad_reason}'",
+            ):
+                svc.validate_recommended_check(check, allowed_ast)
+
+    # 48. Recommended check reason accepts purely evidence-grounded observations and measurements
+    def test_48_recommended_check_reason_accepts_evidence_grounded_measurements(self):
+        svc = GroundedInvestigationService()
+        allowed_ast = {"P-204"}
+
+        check = RawGeminiRecommendedCheck(
+            check="Inspect the suction line and strainer ST-204 for blockage or damage.",
+            reason="EVD-006 recorded suction pressure at 0.8 bar versus a stated normal 1.6 bar shortly before shutdown.",
+            related_asset_ids=["P-204"],
+        )
+        validated = svc.validate_recommended_check(check, allowed_ast)
+        self.assertEqual(validated.check, "Inspect the suction line and strainer ST-204 for blockage or damage.")
+        self.assertEqual(
+            validated.reason,
+            "EVD-006 recorded suction pressure at 0.8 bar versus a stated normal 1.6 bar shortly before shutdown.",
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

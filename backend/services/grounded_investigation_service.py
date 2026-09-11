@@ -73,9 +73,16 @@ CORRELATED findings:
 
 HYPOTHESIS findings:
 - Reason only from supplied context.
-- Inferred possibilities must be explicitly uncertain (using 'may', 'might', 'could', 'plausibly').
-- Never introduce external engineering facts, textbook principles, or unsourced domain knowledge into basis fields (e.g., do NOT state 'Cavitation is a known phenomenon that causes...' or 'Overcurrent can be caused by increased mechanical load' unless explicitly stated in retrieved evidence).
+- Hypothesis statements MAY name possible mechanisms (such as cavitation, obstruction, internal damage, mechanical resistance, or bearing wear), but ONLY as explicitly uncertain hypotheses (using 'may', 'might', 'could', 'plausibly').
+- 'basis' fields must contain ONLY facts from retrieved evidence (e.g. recorded measurements, timestamps, alarms, and observations).
+- Never introduce external engineering knowledge, textbook principles, or unsourced domain knowledge into basis fields.
+- Do NOT say symptoms are "consistent with" a mechanism or that a condition "could contribute to" a phenomenon in basis fields unless a retrieved manual or engineering document explicitly supports that relationship.
 - If evidence is insufficient to confirm a mechanism, explicitly classify the conclusion UNKNOWN.
+
+RECOMMENDED CHECKS:
+- Advisory human engineering checks to verify hypotheses or resolve unknowns.
+- 'reason' fields must contain ONLY evidence-grounded reasons (e.g. specific recorded sensor values or observations from retrieved evidence).
+- Do NOT justify checks using external engineering theories or ungrounded mechanism assertions (do NOT say symptoms are "consistent with" or "could contribute to" a mechanism in check reasons).
 
 SUMMARY GROUNDING:
 - Frame the summary strictly by recorded symptoms, alarms, and event sequences (e.g. 'The recorded shutdown was a vibration-trip event preceded by VFD overcurrent, increasing vibration, pressure/flow degradation, and technician-observed rattling.').
@@ -157,8 +164,8 @@ FORBIDDEN_CORRELATED_CAUSAL_PATTERNS = [
     ),
 ]
 
-# Patterns introducing unsourced textbook or external domain theories into HYPOTHESIS basis.
-# Hypotheses must reason strictly from facts present in retrieved RETRACE evidence.
+# Patterns introducing unsourced textbook or external domain theories into HYPOTHESIS basis or check reason.
+# Hypotheses and checks must reason strictly from facts present in retrieved RETRACE evidence.
 UNSOURCED_DOMAIN_THEORY_PATTERNS = [
     re.compile(r"\b(?:is|are)\s+(?:a\s+)?known\s+(?:phenomenon|fact|mechanism|issue|characteristic)\b", re.IGNORECASE),
     re.compile(r"\bknown\s+to\s+cause\b", re.IGNORECASE),
@@ -168,6 +175,11 @@ UNSOURCED_DOMAIN_THEORY_PATTERNS = [
     re.compile(r"\bgenerally\s+(?:caused\s+by|results?\s+from|causes?)\b", re.IGNORECASE),
     re.compile(r"\bcommon\s+cause\s+of\b", re.IGNORECASE),
     re.compile(r"\btextbook\s+(?:example|symptom|case|knowledge)\b", re.IGNORECASE),
+    re.compile(r"\b(?:could|can|may|might)\s+contribute\s+to\b", re.IGNORECASE),
+    re.compile(r"\bcontributes?\s+to\s+(?:cavitation|vibration|wear|damage|failure|overheating|overcurrent|trip|breakdown)\b", re.IGNORECASE),
+    re.compile(r"\b(?:symptoms?\s+(?:are|were)|(?:is|are|were))\s+(?:often\s+|typically\s+|commonly\s+|frequently\s+)?consistent\s+with\b", re.IGNORECASE),
+    re.compile(r"\bconsistent\s+with\s+(?:internal|pump|bearing|impeller|motor|mechanical|cavitation|vibration|obstruction|wear|damage|failure)\b", re.IGNORECASE),
+    re.compile(r"\bindicative\s+of\s+(?:internal|pump|bearing|impeller|motor|mechanical|cavitation|obstruction|damage)\b", re.IGNORECASE),
 ]
 
 # Summary root cause assertion patterns (summaries must not assert an unverified root cause)
@@ -403,7 +415,8 @@ REASONING INSTRUCTIONS:
 2. Formulate 'findings' where each item is classified into exactly one category:
    - OBSERVED: Facts directly contained in provided evidence or event records. Must cite at least one evidence_id or event_id.
    - CORRELATED: Relationships supported by timing, asset topology, or cross-source data. Must cite at least two supporting items. Never state correlation as proven cause. Do NOT use causal words ('caused', 'causing', 'led to', 'leading to', 'resulted in', 'resulting in', 'responsible for', 'produced', 'triggered the failure', 'therefore caused'). Use relational language ('preceded', 'coincided with', 'occurred before', 'was associated with', 'aligned with', 'correlates with').
-   - HYPOTHESIS: Plausible explanations inferred from evidence. Must cite supporting evidence and must use explicit uncertainty language (e.g. 'may', 'might', 'could', 'plausibly'). Never present as established fact. Do NOT introduce external textbook or unsourced engineering theories into basis. State UNKNOWN when evidence cannot establish the mechanism.
+   - HYPOTHESIS: Plausible explanations inferred from evidence. Statements MAY name possible mechanisms (e.g. cavitation, obstruction, internal damage, mechanical resistance), but ONLY as explicitly uncertain hypotheses (e.g. 'may', 'might', 'could', 'plausibly').
+     CRITICAL GROUNDING RULE FOR BASIS: 'basis' fields must contain ONLY facts from retrieved evidence (e.g. 'EVD-006 records 0.8 bar suction pressure, rattling, and shudder at 10:14:18. EVD-003 records vibration increasing to 8.8 mm/s while flow and discharge pressure decreased.'). Do NOT justify a mechanism using external textbook knowledge, and do NOT say symptoms are 'consistent with' or 'could contribute to' a mechanism in the basis unless retrieved documentation explicitly supports that relationship. State UNKNOWN when evidence cannot establish the mechanism.
    - UNKNOWN: Information that cannot currently be determined from available evidence.
 3. For each finding, provide:
    - classification: OBSERVED | CORRELATED | HYPOTHESIS | UNKNOWN
@@ -415,6 +428,7 @@ REASONING INSTRUCTIONS:
 4. Formulate 'unknowns': list of specific information gaps that cannot be resolved from the evidence.
 5. Formulate 'recommended_checks': advisory human engineering checks to verify hypotheses or resolve unknowns.
    - Each check must include 'check', 'reason', and 'related_asset_ids'.
+   - 'reason' fields must contain ONLY evidence-grounded reasons (e.g. 'EVD-006 recorded suction pressure at 0.8 bar versus a stated normal 1.6 bar shortly before shutdown.'). Do NOT use external textbook theories or claims like 'could contribute to' or 'consistent with' in check reasons.
    - NEVER command autonomous machinery actuation (do not command start, stop, reset, bypass, or PLC logic modification).
 6. Grounding rule: ONLY cite evidence_ids, event_ids, and asset_ids that appear explicitly in the data above. NEVER invent IDs.
 """
@@ -613,6 +627,15 @@ REASONING INSTRUCTIONS:
                 raise InvestigationSafetyError(
                     f"Recommended check contains prohibited equipment actuation command: '{check_text}'. "
                     "RETRACE is advisory only and forbidden from executing or prescribing autonomous machinery control."
+                )
+
+        # Grounding check: Ensure recommended-check reason contains only evidence-grounded facts, not external textbook theories
+        for unsourced_pat in UNSOURCED_DOMAIN_THEORY_PATTERNS:
+            m = unsourced_pat.search(reason_text)
+            if m:
+                raise InvestigationValidationError(
+                    f"Recommended check reason introduces unsourced domain or textbook theory ('{m.group(0)}'). "
+                    "Recommended check reasons must contain only factual, evidence-grounded observations and measurements."
                 )
 
         # Asset citation validation in checks
