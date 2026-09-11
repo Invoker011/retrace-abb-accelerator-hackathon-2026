@@ -7,6 +7,17 @@ from backend.schemas.prevention import PreventionNode, PreventionSafeguard, Prev
 from backend.schemas.investigation import InvestigationQueryRequest, InvestigationQueryResponse
 from backend.schemas.context import IncidentContextResponse
 from backend.schemas.upload import UploadedEvidence, EvidenceUploadResponse
+from backend.schemas.replay import (
+    ReplayPhase,
+    ReplayEvidenceReference,
+    ReplayRecordedValue,
+    ReplayRelationshipContext,
+    ReplayAssetState,
+    ReplayEvent,
+    ReplaySummary,
+    ReplayWindowFilter,
+    IncidentReplayResponse,
+)
 
 __all__ = [
     "Incident",
@@ -24,4 +35,13 @@ __all__ = [
     "InvestigationQueryRequest",
     "InvestigationQueryResponse",
     "IncidentContextResponse",
+    "ReplayPhase",
+    "ReplayEvidenceReference",
+    "ReplayRecordedValue",
+    "ReplayRelationshipContext",
+    "ReplayAssetState",
+    "ReplayEvent",
+    "ReplaySummary",
+    "ReplayWindowFilter",
+    "IncidentReplayResponse",
 ]

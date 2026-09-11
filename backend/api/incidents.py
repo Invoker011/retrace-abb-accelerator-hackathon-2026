@@ -1,6 +1,6 @@
 """Incident API endpoints."""
 from typing import List, Optional
-from fastapi import APIRouter, HTTPException, status, UploadFile, File, Form
+from fastapi import APIRouter, HTTPException, status, UploadFile, File, Form, Query
 from backend.services.incident_service import incident_service
 from backend.services.upload_service import ingestion_service, IngestionError
 from backend.schemas.incident import Incident, IncidentEvent
@@ -10,6 +10,8 @@ from backend.schemas.evidence import Evidence
 from backend.schemas.upload import UploadedEvidence
 from backend.schemas.prevention import PreventionScenario
 from backend.schemas.context import IncidentContextResponse
+from backend.schemas.replay import IncidentReplayResponse
+from backend.services.incident_replay_service import get_incident_replay_service
 from backend.graph.models import GraphResponse, GraphSyncResponse, AssetPathResponse
 from backend.services.context_graph_service import context_graph_service, ContextGraphError
 from backend.vector.models import (
@@ -339,6 +341,40 @@ def investigate_incident(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to complete grounded incident investigation.",
         )
+
+
+@router.get(
+    "/{incident_id}/replay",
+    response_model=IncidentReplayResponse,
+    summary="Reconstruct incident chronologically across connected equipment and evidence",
+)
+def get_incident_replay(
+    incident_id: str,
+    start_offset_seconds: Optional[int] = Query(
+        default=None, description="Optional start offset in seconds"
+    ),
+    end_offset_seconds: Optional[int] = Query(
+        default=None, description="Optional end offset in seconds"
+    ),
+) -> IncidentReplayResponse:
+    """Reconstruct an industrial incident chronologically without causal simulation or invented data."""
+    try:
+        service = get_incident_replay_service()
+        return service.get_replay(
+            incident_id=incident_id,
+            start_offset_seconds=start_offset_seconds,
+            end_offset_seconds=end_offset_seconds,
+        )
+    except KeyError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to reconstruct incident replay.",
+        )
+
 
 
 

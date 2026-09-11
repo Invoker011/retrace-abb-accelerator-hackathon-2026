@@ -59,3 +59,9 @@ class TemporalContextService:
 
 # Singleton instance
 temporal_context_service = TemporalContextService()
+
+
+def get_temporal_context_service() -> TemporalContextService:
+    """Return singleton instance of TemporalContextService."""
+    return temporal_context_service
+

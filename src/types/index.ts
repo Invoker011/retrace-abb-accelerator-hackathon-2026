@@ -222,4 +222,82 @@ export interface HybridSearchResponse {
   temporal_context: HybridTemporalContextItem[];
 }
 
+export type ReplayPhase =
+  | 'PRECURSOR'
+  | 'DEGRADATION'
+  | 'OPERATOR_OBSERVATION'
+  | 'PROTECTIVE_SHUTDOWN'
+  | 'UNCLASSIFIED';
+
+export interface ReplayEvidenceReference {
+  evidence_id: string;
+  filename: string;
+  source_type: string;
+  asset_id?: string | null;
+  timestamp?: string | null;
+  original_reference?: string | null;
+}
+
+export interface ReplayRecordedValue {
+  name: string;
+  value: any;
+  unit?: string | null;
+  source_evidence_id?: string | null;
+}
+
+export interface ReplayRelationshipContext {
+  source: string;
+  relationship: string;
+  target: string;
+  description?: string | null;
+}
+
+export interface ReplayAssetState {
+  asset_id: string;
+  asset_name?: string | null;
+  operational_status?: string | null;
+  recorded_values: ReplayRecordedValue[];
+}
+
+export interface ReplayEvent {
+  sequence: number;
+  event_id: string;
+  timestamp: string;
+  relative_seconds: number;
+  asset_id: string;
+  title: string;
+  event_type: string;
+  severity: string;
+  phase: ReplayPhase;
+  description: string;
+  evidence: ReplayEvidenceReference[];
+  related_assets: string[];
+  graph_relationships: ReplayRelationshipContext[];
+  asset_state?: ReplayAssetState | null;
+  recorded_values: ReplayRecordedValue[];
+}
+
+export interface ReplaySummary {
+  event_count: number;
+  asset_count: number;
+  evidence_count: number;
+  duration_seconds: number;
+}
+
+export interface ReplayWindowFilter {
+  start_offset_seconds?: number | null;
+  end_offset_seconds?: number | null;
+}
+
+export interface IncidentReplayResponse {
+  incident_id: string;
+  start_timestamp?: string | null;
+  end_timestamp?: string | null;
+  duration_seconds: number;
+  summary: ReplaySummary;
+  events: ReplayEvent[];
+  window_filter?: ReplayWindowFilter | null;
+}
+
+
 

@@ -11,6 +11,7 @@ import {
   AssetRelationship,
   IncidentEvent,
   Finding,
+  IncidentReplayResponse,
 } from '../types';
 import { apiClient } from './apiClient';
 
@@ -171,5 +172,33 @@ export const incidentService = {
     );
     return [...findings];
   },
+
+  async getIncidentReplay(
+    incidentId: string,
+    startOffsetSeconds?: number,
+    endOffsetSeconds?: number
+  ): Promise<IncidentReplayResponse | undefined> {
+    const params = new URLSearchParams();
+    if (startOffsetSeconds !== undefined && startOffsetSeconds !== null) {
+      params.set('start_offset_seconds', String(startOffsetSeconds));
+    }
+    if (endOffsetSeconds !== undefined && endOffsetSeconds !== null) {
+      params.set('end_offset_seconds', String(endOffsetSeconds));
+    }
+    const query = params.toString() ? `?${params.toString()}` : '';
+
+    try {
+      const data = await apiClient.get<IncidentReplayResponse>(
+        `/api/incidents/${incidentId}/replay${query}`
+      );
+      if (data && (data.incident_id || (data as any).incidentId)) {
+        return data;
+      }
+    } catch {
+      // Graceful fallback for offline / development
+    }
+    return undefined;
+  },
 };
+
 
