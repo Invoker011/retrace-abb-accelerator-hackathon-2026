@@ -358,7 +358,7 @@ class TestPreventionPaths(unittest.TestCase):
             "evidence_basis": "Technician recorded 0.8 bar suction pressure versus normal 1.6 bar in EVD-006.",
             "evidence_ids": ["EVD-006"],
             "uncertainties": ["No evidence confirms whether the suction restriction was transient."],
-            "verification_checks": [{"check": "Inspect suction strainer.", "purpose": "Verify differential pressure."}],
+            "verification_checks": [{"check": "Inspect suction strainer.", "purpose": "Verify restriction or flow condition."}],
         }
         result = self.service.validate_prevention_path(
             path, self.allowed_ev_ids, self.allowed_evt_ids, self.allowed_ast_ids
@@ -483,15 +483,15 @@ class TestPreventionPaths(unittest.TestCase):
         path = {
             "path_id": "PP-004",
             "title": "Earlier response to rising vibration thresholds",
-            "hypothetical_intervention": "Earlier operational review when vibration exceeded Zone B (4.5 mm/s) could potentially have prompted investigation.",
-            "potential_effect": "Might have provided an opportunity to diagnose elevated vibration before reaching the 7.1 mm/s trip threshold.",
-            "evidence_basis": "EVD-004 specifies Section 6.4 limits (Zone B up to 4.5 mm/s, Zone D trip at 7.1 mm/s RMS). EVD-003 records vibration surpassing these limits.",
+            "hypothetical_intervention": "Earlier operational review when vibration entered the documented Zone C warning range beginning at 4.5 mm/s could potentially have prompted investigation.",
+            "potential_effect": "Might have provided an opportunity to diagnose elevated vibration in Zone C (4.5–7.1 mm/s) before reaching the > 7.1 mm/s Zone D trip threshold.",
+            "evidence_basis": "EVD-004 specifies Section 6.4 limits (Zone C warning at 4.5 mm/s, Zone D trip at 7.1 mm/s RMS). EVD-003 records vibration surpassing these limits.",
             "evidence_ids": ["EVD-003", "EVD-004"],
             "event_ids": ["EVT-003"],
             "asset_ids": ["P-204"],
             "uncertainties": ["The rapid speed of vibration rise may have limited the available reaction window."],
             "verification_checks": [
-                {"check": "Examine DCS alarm configuration for Zone B pre-warning.", "purpose": "Confirm if alert thresholds matched manual specifications."}
+                {"check": "Review PLC/SCADA alarm configuration for P-204 vibration warning thresholds.", "purpose": "Confirm if alert thresholds matched manual specifications."}
             ],
         }
         validated = self.service.validate_prevention_path(
@@ -510,9 +510,9 @@ class TestPreventionPaths(unittest.TestCase):
             "evidence_ids": ["EVD-006"],
             "event_ids": ["EVT-004"],
             "asset_ids": ["P-204"],
-            "uncertainties": ["Cannot be confirmed from evidence when suction pressure first dropped below normal."],
+            "uncertainties": ["Cannot be confirmed from evidence when the low suction pressure condition first developed relative to normal 1.6 bar."],
             "verification_checks": [
-                {"check": "Review upstream suction tank level and inlet strainer history.", "purpose": "Identify potential sources of low suction head."}
+                {"check": "Review available suction-side inspection records and suction-pressure history.", "purpose": "Identify potential sources of low suction head."}
             ],
         }
         validated = self.service.validate_prevention_path(
@@ -1219,7 +1219,7 @@ class TestPreventionPaths(unittest.TestCase):
             "evidence_ids": ["EVD-006"],
             "asset_ids": ["P-204"],
             "uncertainties": ["Cannot be determined from available evidence whether low suction pressure was transient."],
-            "verification_checks": [{"check": "Examine suction strainer DP.", "purpose": "Assess flow restriction."}],
+            "verification_checks": [{"check": "Review available suction-side inspection records and suction-pressure history.", "purpose": "Assess flow restriction."}],
         }
         res2 = self.service.validate_prevention_path(
             suction_path,
@@ -1259,7 +1259,7 @@ class TestPreventionPaths(unittest.TestCase):
     # 47. Unknowns grounding: Accepts grounded factual uncertainty
     def test_validate_unknown_accepts_grounded_factual_uncertainty(self):
         valid_unknowns = [
-            "Cannot be confirmed from evidence when suction pressure first dropped below normal 1.6 bar.",
+            "Cannot be confirmed from evidence when the low suction pressure condition first developed relative to normal 1.6 bar.",
             "No evidence confirms whether the +0.08 mm alignment offset recorded in EVD-005 directly contributed to the trip.",
             "Insufficient evidence to determine whether operating staff were notified before vibration exceeded 7.1 mm/s.",
         ]
@@ -1296,6 +1296,219 @@ class TestPreventionPaths(unittest.TestCase):
                 retrieval_result=self.sample_retrieval_result,
             )
         self.assertIn("6.7 mm/s", str(ctx.exception))
+
+    # 49. Suction pressure: Rejects "drop in suction pressure", accepts "recorded low suction pressure"
+    def test_suction_pressure_trend_validation(self):
+        bad_path = {
+            "path_id": "PP-002",
+            "title": "Earlier response to low suction pressure",
+            "hypothetical_intervention": "Earlier inspection may have provided an opportunity to investigate after a drop in suction pressure.",
+            "potential_effect": "Might have provided an opportunity to inspect.",
+            "evidence_basis": "Technician observed suction pressure 0.8 bar versus normal 1.6 bar in EVD-006.",
+            "evidence_ids": ["EVD-006"],
+            "uncertainties": ["Cannot confirm when the low suction pressure condition first developed."],
+            "verification_checks": [{"check": "Review suction pressure history.", "purpose": "Assess head."}],
+        }
+        with self.assertRaises(PreventionValidationError) as ctx:
+            self.service.validate_prevention_path(
+                bad_path,
+                self.allowed_ev_ids,
+                self.allowed_evt_ids,
+                self.allowed_ast_ids,
+                retrieval_result=self.sample_retrieval_result,
+            )
+        self.assertIn("ungrounded process trend", str(ctx.exception).lower())
+
+        # Now test accepted wording
+        good_path = dict(bad_path)
+        good_path["hypothetical_intervention"] = (
+            "Earlier inspection may have provided an opportunity to investigate the recorded low suction pressure condition."
+        )
+        res = self.service.validate_prevention_path(
+            good_path,
+            self.allowed_ev_ids,
+            self.allowed_evt_ids,
+            self.allowed_ast_ids,
+            retrieval_result=self.sample_retrieval_result,
+        )
+        self.assertEqual(res.path_id, "PP-002")
+
+    # 50. Operating zone: Rejects "Zone B" unless in retrieved manual evidence
+    def test_operating_zone_b_rejection(self):
+        bad_path = {
+            "path_id": "PP-001",
+            "title": "Earlier response to vibration",
+            "hypothetical_intervention": "Earlier review when exceeding Zone B (4.5 mm/s) could potentially have prompted investigation.",
+            "potential_effect": "Might have provided an opportunity to inspect.",
+            "evidence_basis": "Historian recorded vibration rising.",
+            "evidence_ids": ["EVD-003"],
+            "uncertainties": ["Rate of degradation is uncertain."],
+            "verification_checks": [{"check": "Review vibration records.", "purpose": "Assess timing."}],
+        }
+        with self.assertRaises(PreventionValidationError) as ctx:
+            self.service.validate_prevention_path(
+                bad_path,
+                self.allowed_ev_ids,
+                self.allowed_evt_ids,
+                self.allowed_ast_ids,
+                retrieval_result=self.sample_retrieval_result,
+            )
+        self.assertIn("zone b", str(ctx.exception).lower())
+
+    # 51. System attribution: Rejects DCS when evidence specifies PLC/SCADA
+    def test_dcs_system_rejection(self):
+        bad_path = {
+            "path_id": "PP-001",
+            "title": "Earlier response to vibration",
+            "hypothetical_intervention": "Earlier operational review could potentially have prompted investigation.",
+            "potential_effect": "Might have provided an opportunity to inspect.",
+            "evidence_basis": "Alarms were recorded in EVD-002.",
+            "evidence_ids": ["EVD-002"],
+            "uncertainties": ["Operator notification timing is uncertain."],
+            "verification_checks": [{"check": "Examine DCS alarm configuration.", "purpose": "Confirm if alert thresholds matched manual."}],
+        }
+        with self.assertRaises(PreventionValidationError) as ctx:
+            self.service.validate_prevention_path(
+                bad_path,
+                self.allowed_ev_ids,
+                self.allowed_evt_ids,
+                self.allowed_ast_ids,
+                retrieval_result=self.sample_retrieval_result,
+            )
+        self.assertIn("dcs", str(ctx.exception).lower())
+
+    # 52. Equipment trip: Rejects motor/M-204 trip assertions
+    def test_motor_trip_assertion_rejection(self):
+        bad_path = {
+            "path_id": "PP-004",
+            "title": "Earlier review of VFD telemetry",
+            "hypothetical_intervention": "Earlier review of VFD telemetry could potentially have provided an opportunity to investigate.",
+            "potential_effect": "Might have provided an opportunity to inspect before escalation.",
+            "evidence_basis": "VFD event log recorded fault code 0x2310 overcurrent warning prior to motor trip.",
+            "evidence_ids": ["EVD-001"],
+            "uncertainties": ["Reason for overcurrent is unconfirmed."],
+            "verification_checks": [{"check": "Review VFD records.", "purpose": "Check timing."}],
+        }
+        with self.assertRaises(PreventionValidationError) as ctx:
+            self.service.validate_prevention_path(
+                bad_path,
+                self.allowed_ev_ids,
+                self.allowed_evt_ids,
+                self.allowed_ast_ids,
+                retrieval_result=self.sample_retrieval_result,
+            )
+        self.assertIn("m-204", str(ctx.exception).lower())
+
+        # Test accepted wording: "prior to the recorded P-204 vibration trip/shutdown"
+        good_path = dict(bad_path)
+        good_path["evidence_basis"] = (
+            "VFD event log recorded fault code 0x2310 overcurrent warning prior to the recorded P-204 vibration trip/shutdown."
+        )
+        res = self.service.validate_prevention_path(
+            good_path,
+            self.allowed_ev_ids,
+            self.allowed_evt_ids,
+            self.allowed_ast_ids,
+            retrieval_result=self.sample_retrieval_result,
+        )
+        self.assertEqual(res.path_id, "PP-004")
+
+    # 53. Verification checks: Rejects invented details (tank levels, differential pressure, VFD trace buffer, phase currents)
+    def test_verification_checks_reject_invented_instrumentation(self):
+        unsupported_checks = [
+            {"check": "Inspect suction-side strainer and tank levels.", "purpose": "Assess fluid level."},
+            {"check": "Verify differential pressure across strainer.", "purpose": "Assess flow restriction."},
+            {"check": "Export VFD diagnostic trace buffer.", "purpose": "Analyze waveform."},
+            {"check": "Review phase currents preceding the overcurrent event.", "purpose": "Identify imbalance."},
+        ]
+        for chk in unsupported_checks:
+            bad_path = {
+                "path_id": "PP-002",
+                "title": "Earlier inspection",
+                "hypothetical_intervention": "Earlier inspection could potentially have provided an opportunity to investigate.",
+                "potential_effect": "Might have provided an opportunity to inspect.",
+                "evidence_basis": "EVD-006 records technician observation.",
+                "evidence_ids": ["EVD-006"],
+                "uncertainties": ["Timing is uncertain."],
+                "verification_checks": [chk],
+            }
+            with self.subTest(chk=chk):
+                with self.assertRaises(PreventionValidationError) as ctx:
+                    self.service.validate_prevention_path(
+                        bad_path,
+                        self.allowed_ev_ids,
+                        self.allowed_evt_ids,
+                        self.allowed_ast_ids,
+                        retrieval_result=self.sample_retrieval_result,
+                    )
+                self.assertIn("ungrounded instrumentation", str(ctx.exception).lower())
+
+    # 54. Uncertainties: Rejects speculative phrasing like "other factors may have become more prominent"
+    def test_uncertainties_reject_speculative_prominence_phrasing(self):
+        bad_path = {
+            "path_id": "PP-002",
+            "title": "Earlier inspection of alignment",
+            "hypothetical_intervention": "Follow-up on previously documented alignment offset may have provided an opportunity to verify shaft runout.",
+            "potential_effect": "May have provided an opportunity to identify alignment condition.",
+            "evidence_basis": "EVD-005 documents WO-88492 angular offset +0.08mm.",
+            "evidence_ids": ["EVD-005"],
+            "uncertainties": [
+                "No evidence confirms that the documented alignment offset directly contributed to the incident, and other factors may have become more prominent."
+            ],
+            "verification_checks": [{"check": "Review CMMS work orders for M-204.", "purpose": "Check laser recheck."}],
+        }
+        with self.assertRaises(PreventionValidationError) as ctx:
+            self.service.validate_prevention_path(
+                bad_path,
+                self.allowed_ev_ids,
+                self.allowed_evt_ids,
+                self.allowed_ast_ids,
+                retrieval_result=self.sample_retrieval_result,
+            )
+        self.assertIn("speculative uncertainty phrasing", str(ctx.exception).lower())
+
+        # Test accepted uncertainty
+        good_path = dict(bad_path)
+        good_path["uncertainties"] = [
+            "No evidence confirms that the documented alignment offset directly contributed to the incident."
+        ]
+        res = self.service.validate_prevention_path(
+            good_path,
+            self.allowed_ev_ids,
+            self.allowed_evt_ids,
+            self.allowed_ast_ids,
+            retrieval_result=self.sample_retrieval_result,
+        )
+        self.assertEqual(res.path_id, "PP-002")
+
+    # 55. Full raw output validation: Rejects "a drop in suction pressure" in summary
+    def test_full_raw_output_validation_rejects_drop_in_suction_pressure_in_summary(self):
+        bad_json = {
+            "summary": "Operating staff observed a drop in suction pressure prior to shutdown.",
+            "paths": [
+                {
+                    "path_id": "PP-001",
+                    "title": "Earlier response to vibration warning",
+                    "hypothetical_intervention": "Earlier operational review could potentially have provided an opportunity to investigate.",
+                    "potential_effect": "Might have mitigated escalation.",
+                    "evidence_basis": "EVD-003 shows rising vibration.",
+                    "evidence_ids": ["EVD-003"],
+                    "verification_checks": [{"check": "Check alarm timing.", "purpose": "Assess response."}],
+                }
+            ],
+            "unknowns": [
+                "Cannot be determined when vibration first escalated."
+            ],
+        }
+        with self.assertRaises(PreventionValidationError) as ctx:
+            self.service._validate_raw_output(
+                bad_json,
+                self.allowed_ev_ids,
+                self.allowed_evt_ids,
+                self.allowed_ast_ids,
+                retrieval_result=self.sample_retrieval_result,
+            )
+        self.assertIn("ungrounded process trend", str(ctx.exception).lower())
 
 
 if __name__ == "__main__":

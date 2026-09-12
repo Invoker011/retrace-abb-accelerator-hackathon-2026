@@ -99,6 +99,7 @@ NUMERIC THRESHOLD AND OPERATING ZONE CONSISTENCY:
    - NEVER assign a measurement to the wrong zone or trip threshold.
    - 6.7 mm/s at 10:14:15 is in Zone C (warning/alert range 4.5–7.1 mm/s). NEVER state that 6.7 mm/s entered Zone D or reached the trip threshold.
    - 8.8 mm/s at 10:14:20 exceeds the Zone D trip threshold (> 7.1 mm/s).
+   - Do NOT introduce "Zone B" unless retrieved manual evidence explicitly defines it. Use: "when vibration entered the documented Zone C warning range beginning at 4.5 mm/s" or equivalent.
 
 EPISTEMIC NEUTRALITY AND NO UNSUPPORTED THEORIES:
 7. A prevention path may identify:
@@ -109,7 +110,16 @@ EPISTEMIC NEUTRALITY AND NO UNSUPPORTED THEORIES:
    Do NOT invent the engineering mechanism by which that intervention would have changed the incident.
    - Prefer: "may have provided an opportunity to investigate..." or "may have provided an opportunity to identify or rule out [condition] as a contributing maintenance concern".
    - Do NOT claim alignment correction "would reduce vibration" or "could potentially have reduced mechanical vibration" unless evidence explicitly proves that.
+   - SUCTION PRESSURE: Evidence only establishes: technician observed suction pressure = 0.8 bar; stated normal = 1.6 bar. There is no suction-pressure time series proving a drop. Change wording to: "recorded low suction pressure" or equivalent. Do NOT say pressure "dropped" or "a drop in suction pressure" unless retrieved evidence contains a time series showing that change.
    - Do NOT use terms like "suction starvation", "cavitation", "air ingress", or "blockage" unless retrieved evidence explicitly uses them. Use "the recorded low suction pressure condition" or "abnormal suction-side condition".
+   - SYSTEM ATTRIBUTION: The retrieved system evidence is PLC / SCADA. Do NOT introduce "DCS". Use: "Review PLC/SCADA alarm configuration for P-204 vibration warning thresholds."
+   - ASSET TRIP ATTRIBUTION: The verified event is: P-204 protective shutdown / vibration trip recorded by PLC-204. Do NOT claim M-204 or motor itself tripped unless evidence explicitly says that. Use: "prior to the recorded P-204 vibration trip/shutdown" or equivalent.
+   - VERIFICATION CHECKS GROUNDING: Verification checks must NOT introduce details not established by retrieved evidence, including: tank levels, differential pressure across strainer, export VFD diagnostic trace buffer, or phase currents. Verification checks may recommend reviewing or inspecting recorded conditions, but must not invent system instrumentation, measurements, or available diagnostic capabilities.
+     Preferred examples:
+     PP-002: "Review available suction-side inspection records and suction-pressure history."
+     PP-003: "Review available VFD warning/fault records associated with W-2310."
+     Do not assume specific trace buffers, channels, or instrumentation exist.
+   - UNCERTAINTIES GROUNDING: Remove speculative wording such as: "other factors may have become more prominent". Keep only evidence-based uncertainty: "No evidence confirms that the documented alignment offset directly contributed to the incident."
    - Do NOT infer that a VFD warning indicates "an abnormal load condition on the motor" unless retrieved VFD/manual evidence explicitly states it. Use "could potentially have provided an earlier opportunity to investigate the abnormal VFD condition recorded before later incident events."
    - In UNKNOWNS: Remove unsupported speculative examples. Do NOT write "(e.g., mechanical binding, electrical fault)". State plainly: "The specific reason for the VFD overcurrent warning is not established by the available evidence." Unknowns must not introduce possible causes that were never retrieved.
 
@@ -127,7 +137,7 @@ GOOD Example 1 (Rising Vibration Telemetry):
 {
   "path_id": "PP-001",
   "title": "Earlier response to rising vibration thresholds",
-  "hypothetical_intervention": "Earlier investigation of the rising vibration when exceeding Zone B (4.5 mm/s) could potentially have provided an opportunity to identify the developing abnormal condition.",
+  "hypothetical_intervention": "Earlier investigation of the rising vibration when vibration entered the documented Zone C warning range beginning at 4.5 mm/s could potentially have provided an opportunity to identify the developing abnormal condition.",
   "potential_effect": "Might have provided an opportunity to diagnose elevated vibration in Zone C (4.5–7.1 mm/s) before reaching the > 7.1 mm/s Zone D trip threshold.",
   "evidence_basis": "Historian recorded vibration rising from 2.1 to 6.7 mm/s (Zone C warning) and subsequently 8.8 mm/s (exceeding Zone D 7.1 mm/s trip limit); manual specifies 4.5 mm/s warning threshold.",
   "evidence_ids": ["EVD-003", "EVD-004"],
@@ -136,7 +146,7 @@ GOOD Example 1 (Rising Vibration Telemetry):
   "uncertainties": ["The rapid speed of vibration rise may have limited the available reaction window before reaching the trip threshold."],
   "verification_checks": [
     {
-      "check": "Examine DCS alarm configuration for Zone B pre-warning.",
+      "check": "Review PLC/SCADA alarm configuration for P-204 vibration warning thresholds.",
       "purpose": "Confirm if alert thresholds matched manual specifications."
     }
   ]
@@ -151,7 +161,7 @@ GOOD Example 2 (Maintenance Work Order Follow-up):
   "evidence_basis": "CMMS record documents +0.08 mm angular offset noted for future laser recheck.",
   "evidence_ids": ["EVD-005"],
   "asset_ids": ["M-204", "P-204"],
-  "uncertainties": ["No evidence confirms that the alignment offset directly contributed to the shutdown."],
+  "uncertainties": ["No evidence confirms that the documented alignment offset directly contributed to the incident."],
   "verification_checks": [
     {
       "check": "Review CMMS historical work orders for M-204.",
@@ -165,16 +175,16 @@ GOOD Example 3 (Technician Suction Observation):
   "path_id": "PP-003",
   "title": "Earlier inspection of suction-side operating conditions",
   "hypothetical_intervention": "Earlier inspection of the suction-side piping may have provided an opportunity to identify the recorded abnormal suction-side condition.",
-  "potential_effect": "Might have provided an opportunity to investigate the low suction pressure condition before operational escalation.",
+  "potential_effect": "Might have provided an opportunity to investigate the recorded low suction pressure condition before operational escalation.",
   "evidence_basis": "Technician logged suction gauge reading 0.8 bar versus normal 1.6 bar and baseplate shudder.",
   "evidence_ids": ["EVD-006"],
   "event_ids": ["EVT-004"],
   "asset_ids": ["P-204"],
-  "uncertainties": ["Cannot be confirmed from available evidence when suction pressure first dropped below normal."],
+  "uncertainties": ["Cannot be confirmed from available evidence when the low suction pressure condition first developed relative to normal 1.6 bar."],
   "verification_checks": [
     {
-      "check": "Inspect suction-side strainer and tank levels.",
-      "purpose": "Verify differential pressure across strainer."
+      "check": "Review available suction-side inspection records and suction-pressure history.",
+      "purpose": "Identify potential sources of low suction head."
     }
   ]
 }
@@ -185,14 +195,14 @@ GOOD Example 4 (VFD Telemetry Review):
   "title": "Earlier review of pre-trip VFD warning telemetry",
   "hypothetical_intervention": "Earlier review of VFD telemetry could potentially have provided an earlier opportunity to investigate the abnormal VFD condition recorded before later incident events.",
   "potential_effect": "Might have provided an opportunity to review inverter operating parameters before escalation.",
-  "evidence_basis": "VFD event log recorded fault code 0x2310 overcurrent warning prior to motor trip.",
+  "evidence_basis": "VFD event log recorded fault code 0x2310 overcurrent warning prior to the recorded P-204 vibration trip/shutdown.",
   "evidence_ids": ["EVD-001"],
   "asset_ids": ["VFD-204"],
   "uncertainties": ["The specific reason for the VFD overcurrent warning is not established by the available evidence."],
   "verification_checks": [
     {
-      "check": "Export VFD diagnostic trace buffer.",
-      "purpose": "Review phase currents preceding the overcurrent event."
+      "check": "Review available VFD warning/fault records associated with W-2310.",
+      "purpose": "Check timing of the overcurrent warning relative to the recorded shutdown."
     }
   ]
 }
@@ -356,6 +366,52 @@ UNSUPPORTED_THEORY_PATTERNS = [
     re.compile(r"\bbearing\s+failure\s+was\s+caused\s+by\b", re.IGNORECASE),
     # Causal vibration reduction assertions (e.g. claiming alignment correction reduces vibration)
     re.compile(r"\b(?:reduce[ds]?|reducing)\s+(?:mechanical\s+)?vibration\b", re.IGNORECASE),
+]
+
+# Ungrounded process trend patterns (e.g., claiming suction pressure dropped without time-series evidence)
+UNGROUNDED_PROCESS_TREND_PATTERNS = [
+    re.compile(r"\b(?:a\s+)?drop(?:ped|ping)?\s+in\s+suction\s+pressure\b", re.IGNORECASE),
+    re.compile(r"\bsuction\s+pressure\s+(?:drop(?:ped|ping|s)?|fell|decreased)\b", re.IGNORECASE),
+    re.compile(r"\bsuction\s+(?:gauge\s+)?pressure\s+dropped\b", re.IGNORECASE),
+    re.compile(r"\bpressure\s+dropped\s+to\s+0\.8\s*bar\b", re.IGNORECASE),
+    re.compile(r"\bsuction\s+pressure\s+drop\b", re.IGNORECASE),
+    re.compile(r"\bsuction\s+pressure\s+dropped\b", re.IGNORECASE),
+]
+
+# Ungrounded operating zone patterns (introducing Zone B when not defined in evidence)
+UNGROUNDED_OPERATING_ZONE_PATTERNS = [
+    re.compile(r"\bzone\s+b\b", re.IGNORECASE),
+]
+
+# Ungrounded system attribution patterns (introducing DCS when evidence specifies PLC/SCADA)
+UNGROUNDED_SYSTEM_PATTERNS = [
+    re.compile(r"\bdcs\b", re.IGNORECASE),
+]
+
+# Ungrounded equipment trip assertion patterns (claiming motor/M-204 trip when only P-204 shutdown occurred)
+UNGROUNDED_EQUIPMENT_TRIP_PATTERNS = [
+    re.compile(r"\b(?:motor|m-204)\s+trip(?:ped|s)?\b", re.IGNORECASE),
+    re.compile(r"\btrip\s+of\s+(?:the\s+)?(?:motor|m-204)\b", re.IGNORECASE),
+]
+
+# Ungrounded instrumentation, telemetry channel, and diagnostic capability patterns
+UNGROUNDED_INSTRUMENTATION_PATTERNS = [
+    re.compile(r"\btank\s+levels?\b", re.IGNORECASE),
+    re.compile(r"\blevels?\s+in\s+(?:the\s+)?(?:suction\s+)?tank\b", re.IGNORECASE),
+    re.compile(r"\bdifferential\s+pressure\b", re.IGNORECASE),
+    re.compile(r"\b(?:strainer\s+)?dp\b", re.IGNORECASE),
+    re.compile(r"\b(?:filter|strainer)\s+(?:delta\s+p|dp)\b", re.IGNORECASE),
+    re.compile(r"\b(?:diagnostic\s+)?trace\s+buffers?\b", re.IGNORECASE),
+    re.compile(r"\bexport\s+(?:the\s+)?(?:vfd\s+)?trace\b", re.IGNORECASE),
+    re.compile(r"\bvfd\s+trace\b", re.IGNORECASE),
+    re.compile(r"\bphase\s+currents?\b", re.IGNORECASE),
+    re.compile(r"\bcurrent\s+phases?\b", re.IGNORECASE),
+]
+
+# Speculative uncertainty wording patterns (e.g. "other factors may have become more prominent")
+SPECULATIVE_UNCERTAINTY_PATTERNS = [
+    re.compile(r"\b(?:other\s+)?factors\s+may\s+have\s+become\s+more\s+prominent\b", re.IGNORECASE),
+    re.compile(r"\bbecome\s+more\s+prominent\b", re.IGNORECASE),
 ]
 
 
@@ -605,6 +661,7 @@ STRICT INSTRUCTIONS:
    - Zone D: > 7.1 mm/s (trip threshold)
    6.7 mm/s at 10:14:15 is in Zone C. NEVER claim 6.7 mm/s entered Zone D or reached trip threshold.
    8.8 mm/s at 10:14:20 exceeds the Zone D trip threshold (> 7.1 mm/s).
+   Do NOT introduce "Zone B" unless retrieved manual evidence explicitly defines it. Use: "when vibration entered the documented Zone C warning range beginning at 4.5 mm/s" or equivalent.
 7. EPISTEMIC NEUTRALITY AND NO UNSUPPORTED THEORIES:
    A prevention path may identify:
    - earlier detection opportunity
@@ -614,7 +671,16 @@ STRICT INSTRUCTIONS:
    Do NOT invent the engineering mechanism by which that intervention would have changed the incident.
    - Prefer: "may have provided an opportunity to investigate..." or "may have provided an opportunity to identify or rule out [condition] as a contributing maintenance concern".
    - Do NOT claim alignment correction "would reduce vibration" or "could potentially have reduced mechanical vibration" unless evidence explicitly proves that.
+   - SUCTION PRESSURE: Evidence only establishes: technician observed suction pressure = 0.8 bar; stated normal = 1.6 bar. There is no suction-pressure time series proving a drop. Change wording to: "recorded low suction pressure" or equivalent. Do NOT say pressure "dropped" or "a drop in suction pressure" unless retrieved evidence contains a time series showing that change.
    - Do NOT use terms like "suction starvation", "cavitation", "air ingress", or "blockage" unless retrieved evidence explicitly uses them. Use "the recorded low suction pressure condition" or "abnormal suction-side condition".
+   - SYSTEM ATTRIBUTION: The retrieved system evidence is PLC / SCADA. Do NOT introduce "DCS". Use: "Review PLC/SCADA alarm configuration for P-204 vibration warning thresholds."
+   - ASSET TRIP ATTRIBUTION: The verified event is: P-204 protective shutdown / vibration trip recorded by PLC-204. Do NOT claim M-204 or motor itself tripped unless evidence explicitly says that. Use: "prior to the recorded P-204 vibration trip/shutdown" or equivalent.
+   - VERIFICATION CHECKS GROUNDING: Verification checks must NOT introduce details not established by retrieved evidence, including: tank levels, differential pressure across strainer, export VFD diagnostic trace buffer, or phase currents. Verification checks may recommend reviewing or inspecting recorded conditions, but must not invent system instrumentation, measurements, or available diagnostic capabilities.
+     Preferred examples:
+     PP-002: "Review available suction-side inspection records and suction-pressure history."
+     PP-003: "Review available VFD warning/fault records associated with W-2310."
+     Do not assume specific trace buffers, channels, or instrumentation exist.
+   - UNCERTAINTIES GROUNDING: Remove speculative wording such as: "other factors may have become more prominent". Keep only evidence-based uncertainty: "No evidence confirms that the documented alignment offset directly contributed to the incident."
    - Do NOT infer that a VFD warning indicates "an abnormal load condition on the motor" unless retrieved VFD/manual evidence explicitly states it. Use "could potentially have provided an earlier opportunity to investigate the abnormal VFD condition recorded before later incident events."
    - In UNKNOWNS: Remove unsupported speculative examples. Do NOT write "(e.g., mechanical binding, electrical fault)". State plainly: "The specific reason for the VFD overcurrent warning is not established by the available evidence." Unknowns must not introduce possible causes that were never retrieved.
 8. MANDATORY UNCERTAINTIES:
@@ -627,20 +693,27 @@ STRICT INSTRUCTIONS:
 STRUCTURED EXAMPLES OF VALID PREVENTION PATHS:
 
 GOOD Example 1 (Rising Vibration):
-- hypothetical_intervention: "Earlier investigation of the rising vibration when exceeding Zone B (4.5 mm/s) could potentially have provided an opportunity to identify the developing abnormal condition."
+- hypothetical_intervention: "Earlier investigation of the rising vibration when vibration entered the documented Zone C warning range beginning at 4.5 mm/s could potentially have provided an opportunity to identify the developing abnormal condition."
 - potential_effect: "Might have provided an opportunity to diagnose elevated vibration in Zone C (4.5–7.1 mm/s) before reaching the > 7.1 mm/s Zone D trip threshold."
+- verification_checks: check: "Review PLC/SCADA alarm configuration for P-204 vibration warning thresholds.", purpose: "Confirm if alert thresholds matched manual specifications."
 
 GOOD Example 2 (Maintenance Work Order):
 - hypothetical_intervention: "Follow-up on the previously documented alignment offset may have provided an earlier opportunity to determine whether the documented alignment condition required correction before subsequent operation."
 - potential_effect: "May have provided an opportunity to identify or rule out the documented alignment condition as a contributing maintenance concern."
+- uncertainties: ["No evidence confirms that the documented alignment offset directly contributed to the incident."]
+- verification_checks: check: "Review CMMS historical work orders for M-204.", purpose: "Determine whether turnaround laser recheck was completed."
 
-GOOD Example 3 (Suction Pressure Restriction):
+GOOD Example 3 (Suction Pressure Observation):
 - hypothetical_intervention: "Earlier inspection of the suction-side piping may have provided an opportunity to identify the recorded abnormal suction-side condition."
-- potential_effect: "Might have provided an opportunity to investigate the low suction pressure condition before operational escalation."
+- potential_effect: "Might have provided an opportunity to investigate the recorded low suction pressure condition before operational escalation."
+- uncertainties: ["Cannot be confirmed from available evidence when the low suction pressure condition first developed relative to normal 1.6 bar."]
+- verification_checks: check: "Review available suction-side inspection records and suction-pressure history.", purpose: "Identify potential sources of low suction head."
 
 GOOD Example 4 (VFD Telemetry Review):
 - hypothetical_intervention: "Earlier review of VFD telemetry could potentially have provided an earlier opportunity to investigate the abnormal VFD condition recorded before later incident events."
 - potential_effect: "Might have provided an opportunity to review inverter operating parameters before escalation."
+- evidence_basis: "VFD event log recorded fault code 0x2310 overcurrent warning prior to the recorded P-204 vibration trip/shutdown."
+- verification_checks: check: "Review available VFD warning/fault records associated with W-2310.", purpose: "Check timing of the overcurrent warning relative to the recorded shutdown."
 </SYSTEM_DIRECTIVE>
 
 <UNTRUSTED_EVIDENCE_DATA>
@@ -837,6 +910,175 @@ Formulate potential prevention paths formatted according to the requested struct
                         + f": '{match.group(0)}'. Such mechanisms must not be asserted unless explicitly present in retrieved evidence."
                     )
 
+    def validate_ungrounded_process_trends(
+        self,
+        text: str,
+        retrieval_result: Optional[Dict[str, Any]],
+        field_name: str,
+        path_id: str = "",
+    ) -> None:
+        """Validate that text does not introduce unsupported process trends (e.g. claiming suction pressure dropped)."""
+        if not text:
+            return
+
+        retrieved_text_corpus = self._extract_retrieved_text_corpus(retrieval_result)
+        for pattern in UNGROUNDED_PROCESS_TREND_PATTERNS:
+            match = pattern.search(text)
+            if match:
+                matched_str = match.group(0).lower()
+                is_grounded = bool(
+                    retrieved_text_corpus and (pattern.search(retrieved_text_corpus) or matched_str in retrieved_text_corpus)
+                )
+                if not is_grounded:
+                    raise PreventionValidationError(
+                        f"Ungrounded process trend detected in {field_name}"
+                        + (f" for path '{path_id}'" if path_id else "")
+                        + f": '{match.group(0)}'. Evidence only records a single spot observation (0.8 bar vs normal 1.6 bar) without a time-series drop. Use 'recorded low suction pressure' or equivalent."
+                    )
+
+    def validate_ungrounded_operating_zones(
+        self,
+        text: str,
+        retrieval_result: Optional[Dict[str, Any]],
+        field_name: str,
+        path_id: str = "",
+    ) -> None:
+        """Validate that text does not introduce ungrounded operating zones (e.g. Zone B)."""
+        if not text:
+            return
+
+        retrieved_text_corpus = self._extract_retrieved_text_corpus(retrieval_result)
+        for pattern in UNGROUNDED_OPERATING_ZONE_PATTERNS:
+            match = pattern.search(text)
+            if match:
+                matched_str = match.group(0).lower()
+                is_grounded = bool(
+                    retrieved_text_corpus and (pattern.search(retrieved_text_corpus) or matched_str in retrieved_text_corpus)
+                )
+                if not is_grounded:
+                    raise PreventionValidationError(
+                        f"Unsupported operating zone detected in {field_name}"
+                        + (f" for path '{path_id}'" if path_id else "")
+                        + f": '{match.group(0)}'. Retrieved manual evidence does not define Zone B; use 'when vibration entered the documented Zone C warning range beginning at 4.5 mm/s' or equivalent."
+                    )
+
+    def validate_ungrounded_equipment_and_systems(
+        self,
+        text: str,
+        retrieval_result: Optional[Dict[str, Any]],
+        field_name: str,
+        path_id: str = "",
+    ) -> None:
+        """Validate that text does not introduce ungrounded control systems (e.g. DCS when evidence specifies PLC/SCADA)."""
+        if not text:
+            return
+
+        retrieved_text_corpus = self._extract_retrieved_text_corpus(retrieval_result)
+        for pattern in UNGROUNDED_SYSTEM_PATTERNS:
+            match = pattern.search(text)
+            if match:
+                matched_str = match.group(0).lower()
+                is_grounded = bool(
+                    retrieved_text_corpus and (pattern.search(retrieved_text_corpus) or matched_str in retrieved_text_corpus)
+                )
+                if not is_grounded:
+                    raise PreventionValidationError(
+                        f"Ungrounded control system detected in {field_name}"
+                        + (f" for path '{path_id}'" if path_id else "")
+                        + f": '{match.group(0)}'. Retrieved evidence specifies PLC / SCADA. Use 'Review PLC/SCADA alarm configuration for P-204 vibration warning thresholds'."
+                    )
+
+    def validate_ungrounded_asset_states(
+        self,
+        text: str,
+        retrieval_result: Optional[Dict[str, Any]],
+        field_name: str,
+        path_id: str = "",
+    ) -> None:
+        """Validate that text does not introduce ungrounded equipment trip claims (e.g. motor/M-204 trip)."""
+        if not text:
+            return
+
+        retrieved_text_corpus = self._extract_retrieved_text_corpus(retrieval_result)
+        for pattern in UNGROUNDED_EQUIPMENT_TRIP_PATTERNS:
+            match = pattern.search(text)
+            if match:
+                matched_str = match.group(0).lower()
+                is_grounded = bool(
+                    retrieved_text_corpus and (pattern.search(retrieved_text_corpus) or matched_str in retrieved_text_corpus)
+                )
+                if not is_grounded:
+                    raise PreventionValidationError(
+                        f"Ungrounded equipment trip assertion detected in {field_name}"
+                        + (f" for path '{path_id}'" if path_id else "")
+                        + f": '{match.group(0)}'. Motor M-204 did not trip; retrieved evidence establishes P-204 protective shutdown/vibration trip recorded by PLC-204. Use 'prior to the recorded P-204 vibration trip/shutdown' or equivalent."
+                    )
+
+    def validate_ungrounded_instrumentation_and_telemetry(
+        self,
+        text: str,
+        retrieval_result: Optional[Dict[str, Any]],
+        field_name: str,
+        path_id: str = "",
+    ) -> None:
+        """Validate that text does not introduce ungrounded instrumentation, measurements, or diagnostic capabilities."""
+        if not text:
+            return
+
+        retrieved_text_corpus = self._extract_retrieved_text_corpus(retrieval_result)
+        for pattern in UNGROUNDED_INSTRUMENTATION_PATTERNS:
+            match = pattern.search(text)
+            if match:
+                matched_str = match.group(0).lower()
+                is_grounded = bool(
+                    retrieved_text_corpus and (pattern.search(retrieved_text_corpus) or matched_str in retrieved_text_corpus)
+                )
+                if not is_grounded:
+                    raise PreventionValidationError(
+                        f"Ungrounded instrumentation or diagnostic capability detected in {field_name}"
+                        + (f" for path '{path_id}'" if path_id else "")
+                        + f": '{match.group(0)}'. Verification checks must not invent ungrounded instrumentation (tank levels, differential pressure across strainer, VFD diagnostic trace buffer, phase currents). Use neutral review of available records."
+                    )
+
+    def validate_speculative_uncertainty_wording(
+        self,
+        text: str,
+        field_name: str,
+        path_id: str = "",
+    ) -> None:
+        """Validate that uncertainties do not contain speculative phrasing like 'other factors may have become more prominent'."""
+        if not text:
+            return
+
+        for pattern in SPECULATIVE_UNCERTAINTY_PATTERNS:
+            match = pattern.search(text)
+            if match:
+                raise PreventionValidationError(
+                    f"Speculative uncertainty phrasing detected in {field_name}"
+                    + (f" for path '{path_id}'" if path_id else "")
+                    + f": '{match.group(0)}'. State only evidence-grounded uncertainty (e.g. 'No evidence confirms that the documented alignment offset directly contributed to the incident.')."
+                )
+
+    def validate_grounded_field(
+        self,
+        text: str,
+        retrieval_result: Optional[Dict[str, Any]],
+        field_name: str,
+        path_id: str = "",
+    ) -> None:
+        """Apply comprehensive grounding, threshold consistency, and safety validation to any response field."""
+        if not text:
+            return
+
+        self.validate_counterfactual_text(text, field_name, path_id)
+        self.validate_threshold_consistency(text, field_name, path_id)
+        self.validate_unsupported_engineering_theory(text, retrieval_result, field_name, path_id)
+        self.validate_ungrounded_process_trends(text, retrieval_result, field_name, path_id)
+        self.validate_ungrounded_operating_zones(text, retrieval_result, field_name, path_id)
+        self.validate_ungrounded_equipment_and_systems(text, retrieval_result, field_name, path_id)
+        self.validate_ungrounded_asset_states(text, retrieval_result, field_name, path_id)
+        self.validate_ungrounded_instrumentation_and_telemetry(text, retrieval_result, field_name, path_id)
+
     def validate_unknown(
         self,
         unknown_text: str,
@@ -854,9 +1096,7 @@ Formulate potential prevention paths formatted according to the requested struct
                 "Unknowns must state what is unconfirmed without introducing speculative example causes."
             )
 
-        self.validate_counterfactual_text(unknown_text, "unknowns")
-        self.validate_threshold_consistency(unknown_text, "unknowns")
-        self.validate_unsupported_engineering_theory(unknown_text, retrieval_result, "unknowns")
+        self.validate_grounded_field(unknown_text, retrieval_result, "unknowns")
 
     def validate_prevention_path(
         self,
@@ -935,47 +1175,31 @@ Formulate potential prevention paths formatted according to the requested struct
                 "Counterfactual investigation must explicitly state uncertainties and unconfirmed factors."
             )
 
-        # 3. Counterfactual Wording Validation
-        self.validate_counterfactual_text(title, "title", path_id)
-        self.validate_counterfactual_text(hypothetical_intervention, "hypothetical_intervention", path_id)
-        self.validate_counterfactual_text(potential_effect, "potential_effect", path_id)
-        self.validate_counterfactual_text(evidence_basis, "evidence_basis", path_id)
+        # 3. Counterfactual Wording & Comprehensive Grounding Validation
+        self.validate_grounded_field(title, retrieval_result, "title", path_id)
+        self.validate_grounded_field(hypothetical_intervention, retrieval_result, "hypothetical_intervention", path_id)
+        self.validate_grounded_field(potential_effect, retrieval_result, "potential_effect", path_id)
+        self.validate_grounded_field(evidence_basis, retrieval_result, "evidence_basis", path_id)
 
-        # 3b. Numeric Threshold Consistency Validation
-        self.validate_threshold_consistency(title, "title", path_id)
-        self.validate_threshold_consistency(hypothetical_intervention, "hypothetical_intervention", path_id)
-        self.validate_threshold_consistency(potential_effect, "potential_effect", path_id)
-        self.validate_threshold_consistency(evidence_basis, "evidence_basis", path_id)
         for u in raw_uncertainties:
             self.validate_threshold_consistency(u, "uncertainties", path_id)
+            self.validate_unsupported_engineering_theory(u, retrieval_result, "uncertainties", path_id)
+            self.validate_ungrounded_process_trends(u, retrieval_result, "uncertainties", path_id)
+            self.validate_ungrounded_operating_zones(u, retrieval_result, "uncertainties", path_id)
+            self.validate_ungrounded_equipment_and_systems(u, retrieval_result, "uncertainties", path_id)
+            self.validate_ungrounded_asset_states(u, retrieval_result, "uncertainties", path_id)
+            self.validate_ungrounded_instrumentation_and_telemetry(u, retrieval_result, "uncertainties", path_id)
+            self.validate_speculative_uncertainty_wording(u, "uncertainties", path_id)
 
         # 4. Mandatory Hypothetical/Conditional Framing
         self.validate_hypothetical_intervention(hypothetical_intervention, path_id)
         self.validate_potential_effect(potential_effect, path_id)
 
-        # 5. Unsupported External Engineering Theory Validation
-        self.validate_unsupported_engineering_theory(
-            title, retrieval_result, "title", path_id
-        )
-        self.validate_unsupported_engineering_theory(
-            hypothetical_intervention, retrieval_result, "hypothetical_intervention", path_id
-        )
-        self.validate_unsupported_engineering_theory(
-            potential_effect, retrieval_result, "potential_effect", path_id
-        )
-        self.validate_unsupported_engineering_theory(
-            evidence_basis, retrieval_result, "evidence_basis", path_id
-        )
-        for u in raw_uncertainties:
-            self.validate_unsupported_engineering_theory(
-                u, retrieval_result, "uncertainties", path_id
-            )
-
-        # 6. Safety Validation (No live actuation / control commands)
+        # 5. Safety Validation (No live actuation / control commands)
         self.validate_safety_instructions(hypothetical_intervention, "hypothetical_intervention", path_id)
         self.validate_safety_instructions(potential_effect, "potential_effect", path_id)
 
-        # 7. Verification Checks Validation
+        # 6. Verification Checks Validation
         validated_checks: List[PreventionVerificationCheck] = []
         for chk in raw_checks:
             if isinstance(chk, dict):
@@ -991,12 +1215,8 @@ Formulate potential prevention paths formatted according to the requested struct
                 raise PreventionValidationError(f"Verification check purpose must not be empty in path '{path_id}'.")
 
             self.validate_safety_instructions(c_text, "verification check", path_id)
-            self.validate_counterfactual_text(c_text, "verification check", path_id)
-            self.validate_counterfactual_text(p_text, "verification check purpose", path_id)
-            self.validate_threshold_consistency(c_text, "verification check", path_id)
-            self.validate_threshold_consistency(p_text, "verification check purpose", path_id)
-            self.validate_unsupported_engineering_theory(c_text, retrieval_result, "verification check", path_id)
-            self.validate_unsupported_engineering_theory(p_text, retrieval_result, "verification check purpose", path_id)
+            self.validate_grounded_field(c_text, retrieval_result, "verification check", path_id)
+            self.validate_grounded_field(p_text, retrieval_result, "verification check purpose", path_id)
 
             validated_checks.append(PreventionVerificationCheck(check=c_text, purpose=p_text))
 
@@ -1079,9 +1299,7 @@ Formulate potential prevention paths formatted according to the requested struct
         Raises PreventionValidationError for other structural/theory errors.
         """
         raw_summary = str(parsed_json.get("summary", "")).strip()
-        self.validate_counterfactual_text(raw_summary, "summary")
-        self.validate_threshold_consistency(raw_summary, "summary")
-        self.validate_unsupported_engineering_theory(raw_summary, retrieval_result, "summary")
+        self.validate_grounded_field(raw_summary, retrieval_result, "summary")
 
         raw_paths = parsed_json.get("paths", [])
         if not isinstance(raw_paths, list):
@@ -1218,6 +1436,11 @@ Formulate potential prevention paths formatted according to the requested struct
                 f"5. THRESHOLD ACCURACY: Respect manual vibration zones. 6.7 mm/s is in Zone C (4.5–7.1 mm/s); only > 7.1 mm/s is in Zone D trip. Never state 6.7 mm/s entered Zone D.\n"
                 f"6. EPISTEMIC NEUTRALITY: Do NOT claim interventions 'reduced vibration' or introduce unsupported mechanisms ('suction starvation', 'cavitation', 'abnormal load condition', 'mechanical binding', 'electrical fault') unless explicitly in retrieved evidence. Frame interventions as opportunities to inspect or investigate.\n"
                 f"7. UNKNOWNS GROUNDING: Unknowns must state what is unconfirmed without introducing speculative example causes (no '(e.g., mechanical binding, electrical fault)').\n"
+                f"8. SUCTION PRESSURE GROUNDING: Do NOT say pressure 'dropped' or 'a drop in suction pressure'; use 'recorded low suction pressure'.\n"
+                f"9. OPERATING ZONE GROUNDING: Do NOT introduce 'Zone B' unless defined in manual evidence; use 'when vibration entered the documented Zone C warning range beginning at 4.5 mm/s'.\n"
+                f"10. SYSTEM & ASSET GROUNDING: Retrieved system evidence is PLC / SCADA (never use 'DCS'). Retrieved shutdown is P-204 protective shutdown/vibration trip (never claim motor or M-204 tripped).\n"
+                f"11. NO UNGROUNDED INSTRUMENTATION: Do NOT invent tank levels, differential pressure across strainer, VFD trace buffer, or phase currents in verification checks.\n"
+                f"12. UNCERTAINTIES GROUNDING: Remove speculative phrasing like 'other factors may have become more prominent'.\n"
                 f"Regenerate the entire structured JSON response strictly adhering to these requirements.\n"
                 f"</VALIDATOR_CORRECTION_FEEDBACK>"
             )
