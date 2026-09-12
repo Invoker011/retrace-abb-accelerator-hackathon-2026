@@ -9,12 +9,14 @@ DEFAULT_CORS_ORIGINS: List[str] = [
     "http://127.0.0.1:5173",
     "http://localhost:8000",
     "http://127.0.0.1:8000",
+    "https://retrace-abb-accelerator-2026-team-nerfthisai.ai.studio",
 ]
 
 def parse_cors_origins() -> List[str]:
     """Parse CORS origins from CORS_ORIGINS environment variable.
     Splits comma-separated origins, trims whitespace/quotes, and filters empty entries.
     Falls back to safe localhost development defaults if unset or empty.
+    Preserves the production frontend origin even if custom comma-separated origins are provided.
     """
     raw_origins = os.getenv("CORS_ORIGINS", "").strip()
     if raw_origins:
@@ -24,6 +26,8 @@ def parse_cors_origins() -> List[str]:
             if origin.strip().strip("'\"")
         ]
         if parsed:
+            if "https://retrace-abb-accelerator-2026-team-nerfthisai.ai.studio" not in parsed:
+                parsed.append("https://retrace-abb-accelerator-2026-team-nerfthisai.ai.studio")
             return parsed
     return DEFAULT_CORS_ORIGINS
 
