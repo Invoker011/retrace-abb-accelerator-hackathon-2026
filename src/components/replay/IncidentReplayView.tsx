@@ -33,6 +33,7 @@ interface IncidentReplayViewProps {
   incidentId?: string;
   onSelectEvidence?: (evidence: Evidence) => void;
   evidenceList?: Evidence[];
+  onNavigate?: (view: any) => void;
   // Legacy / fallback props for compatibility
   events?: IncidentEvent[];
   assets?: Asset[];
@@ -98,6 +99,7 @@ export const IncidentReplayView: React.FC<IncidentReplayViewProps> = ({
   incidentId = 'INC-2026-001',
   onSelectEvidence,
   evidenceList = [],
+  onNavigate,
 }) => {
   const [replayData, setReplayData] = useState<IncidentReplayResponse | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
@@ -273,14 +275,27 @@ export const IncidentReplayView: React.FC<IncidentReplayViewProps> = ({
             </p>
           </div>
 
-          {/* Forensic Disclaimer */}
-          <div className="bg-[#080d19] border border-slate-800 rounded-lg p-3 lg:max-w-md">
-            <div className="flex items-start gap-2 text-[11px] text-slate-300 font-mono">
-              <Info className="w-4 h-4 text-cyan-400 shrink-0 mt-0.5" />
-              <span>
-                Replay reconstructs recorded evidence in chronological order. It does not establish causation.
-              </span>
+          {/* Forensic Disclaimer and Quick Navigation */}
+          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
+            <div className="bg-[#080d19] border border-slate-800 rounded-lg p-3 max-w-md">
+              <div className="flex items-start gap-2 text-[11px] text-slate-300 font-mono">
+                <Info className="w-4 h-4 text-cyan-400 shrink-0 mt-0.5" />
+                <span>
+                  Replay reconstructs recorded evidence in chronological order. It does not establish causation.
+                </span>
+              </div>
             </div>
+            {onNavigate && (
+              <button
+                type="button"
+                onClick={() => onNavigate('prevention')}
+                id="replay-to-prevention-btn"
+                className="px-3 py-2 rounded-lg bg-amber-950/40 border border-amber-800/60 text-amber-300 hover:bg-amber-900/50 hover:border-amber-600 font-mono text-xs flex items-center gap-1.5 transition-colors shrink-0"
+              >
+                <span>Potential Prevention Paths</span>
+                <span className="text-amber-400">→</span>
+              </button>
+            )}
           </div>
         </div>
 

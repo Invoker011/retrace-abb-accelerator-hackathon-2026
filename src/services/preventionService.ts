@@ -18,7 +18,8 @@ export const preventionService = {
     };
     return await apiClient.post<PreventionPathsResponse>(
       `/api/incidents/${incidentId}/prevention-paths`,
-      payload
+      payload,
+      { timeoutMs: 45000 }
     );
   },
 };

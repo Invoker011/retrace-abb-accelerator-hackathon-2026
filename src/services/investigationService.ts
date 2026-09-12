@@ -14,7 +14,7 @@ import { apiClient } from './apiClient';
  */
 export const investigationService = {
   async getInitialConversation(incidentId: string): Promise<ChatMessage[]> {
-    return [...mockChatConversation];
+    return [];
   },
 
   async getSuggestedQuestions(): Promise<string[]> {

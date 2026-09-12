@@ -83,6 +83,13 @@ export default function App() {
     setModalEvidence(evidence);
   };
 
+  const handleSelectEvidenceById = (evidenceId: string) => {
+    const found = evidenceList.find((e) => e.id.toLowerCase() === evidenceId.toLowerCase());
+    if (found) {
+      setModalEvidence(found);
+    }
+  };
+
   const handleSelectEvidenceForView = (evidence: Evidence) => {
     setSelectedEvidenceView(evidence);
     setModalEvidence(evidence);
@@ -146,6 +153,7 @@ export default function App() {
 
           {activeView === 'investigation' && (
             <InvestigationChatView
+              incidentId={incident.id}
               evidenceList={evidenceList}
               onSelectEvidence={handleOpenEvidenceModal}
             />
@@ -156,6 +164,7 @@ export default function App() {
               incidentId={incident.id}
               evidenceList={evidenceList}
               onSelectEvidence={handleOpenEvidenceModal}
+              onNavigate={setActiveView}
               events={events}
               assets={assets}
             />
@@ -183,7 +192,13 @@ export default function App() {
           )}
 
           {activeView === 'prevention' && (
-            <PreventionView scenario={preventionScenario} />
+            <PreventionView
+              incidentId={incident.id}
+              incident={incident}
+              evidenceList={evidenceList}
+              onSelectEvidenceById={handleSelectEvidenceById}
+              onNavigateToView={(view) => setActiveView(view as NavView)}
+            />
           )}
         </main>
       </div>

@@ -18,11 +18,13 @@ import {
 } from 'lucide-react';
 
 interface InvestigationChatViewProps {
+  incidentId?: string;
   evidenceList: Evidence[];
   onSelectEvidence: (evidence: Evidence) => void;
 }
 
 export const InvestigationChatView: React.FC<InvestigationChatViewProps> = ({
+  incidentId = 'INC-2026-001',
   evidenceList,
   onSelectEvidence,
 }) => {
@@ -33,10 +35,7 @@ export const InvestigationChatView: React.FC<InvestigationChatViewProps> = ({
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    // Load initial conversation and suggested questions from service
-    investigationService.getInitialConversation('INC-2026-001').then((msgs) => {
-      setMessages(msgs);
-    });
+    // Load suggested questions from service; conversation starts empty without hardcoded messages
     investigationService.getSuggestedQuestions().then((qs) => {
       setSuggestedQuestions(qs);
     });
@@ -62,20 +61,19 @@ export const InvestigationChatView: React.FC<InvestigationChatViewProps> = ({
     setIsTyping(true);
 
     try {
-      // Query investigation service
-      setTimeout(async () => {
-        const reply = await investigationService.queryInvestigation('INC-2026-001', textToSend);
-        setMessages((prev) => [...prev, reply]);
-        setIsTyping(false);
-      }, 600);
+      const reply = await investigationService.queryInvestigation(incidentId, textToSend);
+      setMessages((prev) => [...prev, reply]);
     } catch (e) {
+      console.error('[RETRACE] Investigation query error:', e);
+    } finally {
       setIsTyping(false);
     }
   };
 
-  const handleResetChat = async () => {
-    const initial = await investigationService.getInitialConversation('INC-2026-001');
-    setMessages(initial);
+  const handleResetChat = () => {
+    setMessages([]);
+    setInputQuery('');
+    setIsTyping(false);
   };
 
   return (
@@ -98,14 +96,15 @@ export const InvestigationChatView: React.FC<InvestigationChatViewProps> = ({
             Incident Investigation Copilot
           </h1>
           <p className="text-xs text-slate-400">
-            Grounded on 6 multimodal evidence sources for Incident INC-2026-001 (Pump P-204)
+            Grounded on 6 multimodal evidence sources for Incident {incidentId} (Pump P-204)
           </p>
         </div>
 
         <button
           onClick={handleResetChat}
-          title="Reset conversation to initial sample"
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-mono text-slate-400 hover:text-slate-200 hover:bg-slate-800 border border-slate-800 transition-colors"
+          id="chat-reset-context-btn"
+          title="Reset entire conversation context"
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-mono text-slate-400 hover:text-slate-200 hover:bg-slate-800 border border-slate-800 transition-colors cursor-pointer"
         >
           <RotateCcw className="w-3.5 h-3.5" />
           <span>Reset Context</span>
@@ -114,93 +113,126 @@ export const InvestigationChatView: React.FC<InvestigationChatViewProps> = ({
 
       {/* Messages Scroll Area */}
       <div className="flex-1 overflow-y-auto space-y-6 pr-2">
-        {messages.map((msg) => {
-          const isTechnician = msg.sender === 'technician';
-          return (
-            <div
-              key={msg.id}
-              className={`flex gap-3.5 ${
-                isTechnician ? 'justify-end' : 'justify-start'
-              }`}
-            >
-              {!isTechnician && (
-                <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-cyan-600 to-blue-700 flex items-center justify-center text-white shrink-0 shadow-md">
-                  <Bot className="w-4 h-4" />
-                </div>
-              )}
+        {messages.length === 0 ? (
+          <div
+            id="investigation-empty-placeholder"
+            className="h-full min-h-[260px] flex flex-col items-center justify-center text-center p-6 border border-dashed border-slate-800 rounded-xl bg-[#080d19]/40 space-y-4"
+          >
+            <div className="w-11 h-11 rounded-xl bg-cyan-950/60 border border-cyan-800/60 text-cyan-400 flex items-center justify-center">
+              <Sparkles className="w-5 h-5" />
+            </div>
+            <div className="space-y-1 max-w-md">
+              <h3 className="text-sm font-mono font-semibold text-white">
+                Investigation Copilot Ready
+              </h3>
+              <p className="text-xs font-sans text-slate-400 leading-relaxed">
+                Query operational evidence, alarms, sensor anomalies, and maintenance logs for Incident <span className="font-mono text-cyan-300 font-semibold">{incidentId}</span>.
+              </p>
+            </div>
 
+            {/* Non-chat example reference - separate from conversation history */}
+            <div className="w-full max-w-lg p-3.5 rounded-lg bg-[#0c1220] border border-slate-800 text-left space-y-1.5 text-xs font-mono">
+              <div className="flex items-center justify-between text-slate-500 text-[10px]">
+                <span className="uppercase tracking-wider">Example Investigation Query</span>
+                <span>Incident {incidentId}</span>
+              </div>
+              <p className="text-cyan-300 font-sans text-xs font-medium">
+                "Why did Pump P-204 shut down?"
+              </p>
+              <p className="text-[11px] text-slate-400 font-sans leading-relaxed">
+                RETRACE queries are grounded on verified SCADA alarms, VFD fault logs, historian pressure telemetry, and maintenance records with explicit distinction between Observed, Correlated, and Hypothesized findings.
+              </p>
+            </div>
+          </div>
+        ) : (
+          messages.map((msg) => {
+            const isTechnician = msg.sender === 'technician';
+            return (
               <div
-                className={`max-w-2xl rounded-xl p-4.5 space-y-3 ${
-                  isTechnician
-                    ? 'bg-blue-600/20 border border-blue-500/40 text-blue-50'
-                    : 'bg-[#0b101c] border border-slate-800 text-slate-200 shadow-lg'
+                key={msg.id}
+                className={`flex gap-3.5 ${
+                  isTechnician ? 'justify-end' : 'justify-start'
                 }`}
               >
-                {/* Message Header */}
-                <div className="flex items-center justify-between gap-3 text-xs font-mono">
-                  <span className={`font-semibold ${isTechnician ? 'text-blue-300' : 'text-cyan-400'}`}>
-                    {isTechnician ? 'Technician' : 'RETRACE Intelligence'}
-                  </span>
-                  <span className="text-slate-500 text-[10px]">{msg.timestamp}</span>
-                </div>
-
-                {/* Finding category badge if attached */}
-                {msg.findingReferenceCategory && (
-                  <div>
-                    <FindingBadge category={msg.findingReferenceCategory} size="sm" />
+                {!isTechnician && (
+                  <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-cyan-600 to-blue-700 flex items-center justify-center text-white shrink-0 shadow-md">
+                    <Bot className="w-4 h-4" />
                   </div>
                 )}
 
-                {/* Content */}
-                <div className="text-xs sm:text-sm leading-relaxed whitespace-pre-wrap font-sans text-slate-200">
-                  {msg.content}
+                <div
+                  className={`max-w-2xl rounded-xl p-4.5 space-y-3 ${
+                    isTechnician
+                      ? 'bg-blue-600/20 border border-blue-500/40 text-blue-50'
+                      : 'bg-[#0b101c] border border-slate-800 text-slate-200 shadow-lg'
+                  }`}
+                >
+                  {/* Message Header */}
+                  <div className="flex items-center justify-between gap-3 text-xs font-mono">
+                    <span className={`font-semibold ${isTechnician ? 'text-blue-300' : 'text-cyan-400'}`}>
+                      {isTechnician ? 'Technician' : 'RETRACE Intelligence'}
+                    </span>
+                    <span className="text-slate-500 text-[10px]">{msg.timestamp}</span>
+                  </div>
+
+                  {/* Finding category badge if attached */}
+                  {msg.findingReferenceCategory && (
+                    <div>
+                      <FindingBadge category={msg.findingReferenceCategory} size="sm" />
+                    </div>
+                  )}
+
+                  {/* Content */}
+                  <div className="text-xs sm:text-sm leading-relaxed whitespace-pre-wrap font-sans text-slate-200">
+                    {msg.content}
+                  </div>
+
+                  {/* Supporting Evidence Attachments */}
+                  {msg.supportingEvidence && msg.supportingEvidence.length > 0 && (
+                    <div className="pt-3 border-t border-slate-800/80 space-y-2">
+                      <div className="flex items-center gap-1.5 text-xs font-mono text-cyan-400">
+                        <ShieldCheck className="w-3.5 h-3.5 text-cyan-400" />
+                        <span>Supporting Evidence Records:</span>
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                        {msg.supportingEvidence.map((evItem) => {
+                          const fullEv = evidenceList.find((e) => e.id === evItem.id);
+                          return (
+                            <div
+                              key={evItem.id}
+                              onClick={() => fullEv && onSelectEvidence(fullEv)}
+                              className="p-2.5 rounded-lg bg-slate-900/80 border border-slate-800 hover:border-cyan-700/60 transition-all cursor-pointer group text-xs font-mono"
+                            >
+                              <div className="flex items-center justify-between text-cyan-300 group-hover:underline font-bold text-[11px]">
+                                <span className="flex items-center gap-1.5">
+                                  <FileSpreadsheet className="w-3.5 h-3.5 text-cyan-400" />
+                                  {evItem.filename}
+                                </span>
+                                <span className="text-[10px] text-slate-500 font-normal">
+                                  Inspect →
+                                </span>
+                              </div>
+                              <p className="text-[11px] text-slate-400 font-sans mt-1 line-clamp-1">
+                                {evItem.summary}
+                              </p>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
                 </div>
 
-                {/* Supporting Evidence Attachments */}
-                {msg.supportingEvidence && msg.supportingEvidence.length > 0 && (
-                  <div className="pt-3 border-t border-slate-800/80 space-y-2">
-                    <div className="flex items-center gap-1.5 text-xs font-mono text-cyan-400">
-                      <ShieldCheck className="w-3.5 h-3.5 text-cyan-400" />
-                      <span>Supporting Evidence Records:</span>
-                    </div>
-
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                      {msg.supportingEvidence.map((evItem) => {
-                        const fullEv = evidenceList.find((e) => e.id === evItem.id);
-                        return (
-                          <div
-                            key={evItem.id}
-                            onClick={() => fullEv && onSelectEvidence(fullEv)}
-                            className="p-2.5 rounded-lg bg-slate-900/80 border border-slate-800 hover:border-cyan-700/60 transition-all cursor-pointer group text-xs font-mono"
-                          >
-                            <div className="flex items-center justify-between text-cyan-300 group-hover:underline font-bold text-[11px]">
-                              <span className="flex items-center gap-1.5">
-                                <FileSpreadsheet className="w-3.5 h-3.5 text-cyan-400" />
-                                {evItem.filename}
-                              </span>
-                              <span className="text-[10px] text-slate-500 font-normal">
-                                Inspect →
-                              </span>
-                            </div>
-                            <p className="text-[11px] text-slate-400 font-sans mt-1 line-clamp-1">
-                              {evItem.summary}
-                            </p>
-                          </div>
-                        );
-                      })}
-                    </div>
+                {isTechnician && (
+                  <div className="w-8 h-8 rounded-lg bg-slate-800 border border-slate-700 flex items-center justify-center text-slate-300 shrink-0">
+                    <User className="w-4 h-4" />
                   </div>
                 )}
               </div>
-
-              {isTechnician && (
-                <div className="w-8 h-8 rounded-lg bg-slate-800 border border-slate-700 flex items-center justify-center text-slate-300 shrink-0">
-                  <User className="w-4 h-4" />
-                </div>
-              )}
-            </div>
-          );
-        })}
+            );
+          })
+        )}
 
         {isTyping && (
           <div className="flex gap-3.5 items-center text-slate-400 text-xs font-mono pl-1">
