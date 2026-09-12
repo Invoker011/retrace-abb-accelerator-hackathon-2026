@@ -512,7 +512,7 @@ class TestPreventionPaths(unittest.TestCase):
             "asset_ids": ["P-204"],
             "uncertainties": ["Cannot be confirmed from evidence when the low suction pressure condition first developed relative to normal 1.6 bar."],
             "verification_checks": [
-                {"check": "Review available suction-side inspection records and suction-pressure history.", "purpose": "Identify potential sources of low suction head."}
+                {"check": "Review available suction-side inspection records and suction-pressure history.", "purpose": "Identify potential sources of recorded low suction pressure."}
             ],
         }
         validated = self.service.validate_prevention_path(
@@ -1509,6 +1509,144 @@ class TestPreventionPaths(unittest.TestCase):
                 retrieval_result=self.sample_retrieval_result,
             )
         self.assertIn("ungrounded process trend", str(ctx.exception).lower())
+
+    # 56. Maintenance evidence: Rejects PM routine / interval / scheduled service and requires turnaround wording
+    def test_maintenance_evidence_rejects_pm_routine_and_accepts_turnaround_recheck(self):
+        unsupported_phrasings = [
+            "recommended for future laser recheck during a PM routine",
+            "recommended for follow-up during next preventive maintenance interval",
+            "recommended for laser recheck at upcoming scheduled service",
+        ]
+        for bad_phrase in unsupported_phrasings:
+            with self.subTest(bad_phrase=bad_phrase):
+                bad_path = {
+                    "path_id": "PP-004",
+                    "title": "Earlier follow-up on maintenance alignment offset",
+                    "hypothetical_intervention": f"Follow-up on previously documented alignment offset {bad_phrase} may have provided an opportunity to verify shaft runout.",
+                    "potential_effect": "May have provided an opportunity to identify or rule out the documented alignment condition as a contributing maintenance concern.",
+                    "evidence_basis": f"CMMS record EVD-005 documents WO-88492 angular offset {bad_phrase}.",
+                    "evidence_ids": ["EVD-005"],
+                    "asset_ids": ["M-204", "P-204"],
+                    "uncertainties": [
+                        "No evidence confirms that the documented alignment offset directly contributed to the incident."
+                    ],
+                    "verification_checks": [
+                        {"check": "Review CMMS historical work orders for M-204.", "purpose": "Determine whether turnaround laser recheck was completed."}
+                    ],
+                }
+                with self.assertRaises(PreventionValidationError) as ctx:
+                    self.service.validate_prevention_path(
+                        bad_path,
+                        self.allowed_ev_ids,
+                        self.allowed_evt_ids,
+                        self.allowed_ast_ids,
+                        retrieval_result=self.sample_retrieval_result,
+                    )
+                self.assertIn("ungrounded maintenance interval", str(ctx.exception).lower())
+
+        # Grounded phrasing matching evidence EVD-005: "recommended for laser recheck on the next major planned turnaround"
+        grounded_path = {
+            "path_id": "PP-004",
+            "title": "Earlier follow-up on maintenance alignment offset",
+            "hypothetical_intervention": "Follow-up on previously documented alignment offset recommended for laser recheck on the next major planned turnaround may have provided an opportunity to verify shaft runout.",
+            "potential_effect": "May have provided an opportunity to identify or rule out the documented alignment condition as a contributing maintenance concern.",
+            "evidence_basis": "CMMS record EVD-005 documents WO-88492 angular offset +0.08 mm recommended for laser recheck on the next major planned turnaround.",
+            "evidence_ids": ["EVD-005"],
+            "asset_ids": ["M-204", "P-204"],
+            "uncertainties": [
+                "No evidence confirms that the documented alignment offset directly contributed to the incident."
+            ],
+            "verification_checks": [
+                {"check": "Review CMMS historical work orders for M-204.", "purpose": "Determine whether turnaround laser recheck was completed."}
+            ],
+        }
+        res = self.service.validate_prevention_path(
+            grounded_path,
+            self.allowed_ev_ids,
+            self.allowed_evt_ids,
+            self.allowed_ast_ids,
+            retrieval_result=self.sample_retrieval_result,
+        )
+        self.assertEqual(res.path_id, "PP-004")
+        self.assertIn("turnaround", res.evidence_basis)
+
+    # 57. Suction terminology: Rejects "low suction head" and requires "recorded low suction pressure"
+    def test_suction_terminology_rejects_low_suction_head_and_accepts_recorded_low_suction_pressure(self):
+        # 1. Reject "low suction head" in verification check purpose
+        bad_purpose_path = {
+            "path_id": "PP-003",
+            "title": "Earlier inspection of suction-side piping",
+            "hypothetical_intervention": "Earlier inspection of the suction-side piping may have provided an opportunity to identify the recorded abnormal suction-side condition.",
+            "potential_effect": "Might have provided an opportunity to investigate the recorded low suction pressure condition before operational escalation.",
+            "evidence_basis": "Technician log EVD-006 records suction pressure 0.8 bar versus normal 1.6 bar.",
+            "evidence_ids": ["EVD-006"],
+            "event_ids": ["EVT-004"],
+            "asset_ids": ["P-204"],
+            "uncertainties": [
+                "Cannot be confirmed from available evidence when the low suction pressure condition first developed relative to normal 1.6 bar."
+            ],
+            "verification_checks": [
+                {"check": "Review available suction-side inspection records and suction-pressure history.", "purpose": "Identify potential sources of low suction head."}
+            ],
+        }
+        with self.assertRaises(PreventionValidationError) as ctx:
+            self.service.validate_prevention_path(
+                bad_purpose_path,
+                self.allowed_ev_ids,
+                self.allowed_evt_ids,
+                self.allowed_ast_ids,
+                retrieval_result=self.sample_retrieval_result,
+            )
+        self.assertIn("ungrounded suction terminology", str(ctx.exception).lower())
+
+        # 2. Reject "suction head" in hypothetical intervention or potential effect
+        bad_intervention_path = dict(bad_purpose_path)
+        bad_intervention_path["hypothetical_intervention"] = "Earlier inspection to address low suction head may have provided an opportunity to investigate."
+        bad_intervention_path["verification_checks"] = [
+            {"check": "Review available records.", "purpose": "Identify potential sources of recorded low suction pressure."}
+        ]
+        with self.assertRaises(PreventionValidationError) as ctx:
+            self.service.validate_prevention_path(
+                bad_intervention_path,
+                self.allowed_ev_ids,
+                self.allowed_evt_ids,
+                self.allowed_ast_ids,
+                retrieval_result=self.sample_retrieval_result,
+            )
+        self.assertIn("ungrounded suction terminology", str(ctx.exception).lower())
+
+        # 3. Accept "recorded low suction pressure" across all fields including verification purpose
+        grounded_suction_path = {
+            "path_id": "PP-003",
+            "title": "Earlier inspection of suction-side piping",
+            "hypothetical_intervention": "Earlier inspection of the suction-side piping may have provided an opportunity to identify the recorded abnormal suction-side condition.",
+            "potential_effect": "Might have provided an opportunity to investigate the recorded low suction pressure condition before operational escalation.",
+            "evidence_basis": "Technician log EVD-006 records suction pressure 0.8 bar versus normal 1.6 bar.",
+            "evidence_ids": ["EVD-006"],
+            "event_ids": ["EVT-004"],
+            "asset_ids": ["P-204"],
+            "uncertainties": [
+                "Cannot be confirmed from available evidence when the low suction pressure condition first developed relative to normal 1.6 bar."
+            ],
+            "verification_checks": [
+                {
+                    "check": "Review available suction-side inspection records and suction-pressure history.",
+                    "purpose": "Identify potential sources of recorded low suction pressure.",
+                }
+            ],
+        }
+        res = self.service.validate_prevention_path(
+            grounded_suction_path,
+            self.allowed_ev_ids,
+            self.allowed_evt_ids,
+            self.allowed_ast_ids,
+            retrieval_result=self.sample_retrieval_result,
+        )
+        self.assertEqual(res.path_id, "PP-003")
+        self.assertEqual(
+            res.verification_checks[0].purpose,
+            "Identify potential sources of recorded low suction pressure.",
+        )
 
 
 if __name__ == "__main__":

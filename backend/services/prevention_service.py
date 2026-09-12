@@ -110,7 +110,8 @@ EPISTEMIC NEUTRALITY AND NO UNSUPPORTED THEORIES:
    Do NOT invent the engineering mechanism by which that intervention would have changed the incident.
    - Prefer: "may have provided an opportunity to investigate..." or "may have provided an opportunity to identify or rule out [condition] as a contributing maintenance concern".
    - Do NOT claim alignment correction "would reduce vibration" or "could potentially have reduced mechanical vibration" unless evidence explicitly proves that.
-   - SUCTION PRESSURE: Evidence only establishes: technician observed suction pressure = 0.8 bar; stated normal = 1.6 bar. There is no suction-pressure time series proving a drop. Change wording to: "recorded low suction pressure" or equivalent. Do NOT say pressure "dropped" or "a drop in suction pressure" unless retrieved evidence contains a time series showing that change.
+   - SUCTION PRESSURE TERMINOLOGY: Evidence only establishes: technician observed suction pressure = 0.8 bar; stated normal = 1.6 bar. There is no suction-pressure time series proving a drop. Change wording to: "recorded low suction pressure" or equivalent. Do NOT say pressure "dropped" or "a drop in suction pressure" unless retrieved evidence contains a time series showing that change. Do NOT rewrite this as "low suction head"; use "recorded low suction pressure". Verification check purpose should use this same evidence terminology (e.g., "Identify potential sources of recorded low suction pressure.").
+   - MAINTENANCE EVIDENCE GROUNDING: Retrieved EVD-005 states the alignment condition was "recommended for laser recheck on the next major planned turnaround". Require wording grounded to that exact concept: "recommended for laser recheck on the next major planned turnaround". Do NOT introduce "PM routine", "preventive maintenance interval", or "scheduled service" unless explicitly present in evidence.
    - Do NOT use terms like "suction starvation", "cavitation", "air ingress", or "blockage" unless retrieved evidence explicitly uses them. Use "the recorded low suction pressure condition" or "abnormal suction-side condition".
    - SYSTEM ATTRIBUTION: The retrieved system evidence is PLC / SCADA. Do NOT introduce "DCS". Use: "Review PLC/SCADA alarm configuration for P-204 vibration warning thresholds."
    - ASSET TRIP ATTRIBUTION: The verified event is: P-204 protective shutdown / vibration trip recorded by PLC-204. Do NOT claim M-204 or motor itself tripped unless evidence explicitly says that. Use: "prior to the recorded P-204 vibration trip/shutdown" or equivalent.
@@ -158,7 +159,7 @@ GOOD Example 2 (Maintenance Work Order Follow-up):
   "title": "Follow-up on previously documented shaft alignment offset",
   "hypothetical_intervention": "Follow-up on the previously documented alignment offset may have provided an earlier opportunity to determine whether the documented alignment condition required correction before subsequent operation.",
   "potential_effect": "May have provided an opportunity to identify or rule out the documented alignment condition as a contributing maintenance concern.",
-  "evidence_basis": "CMMS record documents +0.08 mm angular offset noted for future laser recheck.",
+  "evidence_basis": "CMMS record documents +0.08 mm angular offset recommended for laser recheck on the next major planned turnaround.",
   "evidence_ids": ["EVD-005"],
   "asset_ids": ["M-204", "P-204"],
   "uncertainties": ["No evidence confirms that the documented alignment offset directly contributed to the incident."],
@@ -184,7 +185,7 @@ GOOD Example 3 (Technician Suction Observation):
   "verification_checks": [
     {
       "check": "Review available suction-side inspection records and suction-pressure history.",
-      "purpose": "Identify potential sources of low suction head."
+      "purpose": "Identify potential sources of recorded low suction pressure."
     }
   ]
 }
@@ -412,6 +413,18 @@ UNGROUNDED_INSTRUMENTATION_PATTERNS = [
 SPECULATIVE_UNCERTAINTY_PATTERNS = [
     re.compile(r"\b(?:other\s+)?factors\s+may\s+have\s+become\s+more\s+prominent\b", re.IGNORECASE),
     re.compile(r"\bbecome\s+more\s+prominent\b", re.IGNORECASE),
+]
+
+# Ungrounded maintenance interval patterns (introducing PM routine / interval / scheduled service when evidence specifies turnaround)
+UNGROUNDED_MAINTENANCE_INTERVAL_PATTERNS = [
+    re.compile(r"\bpm\s+routine\b", re.IGNORECASE),
+    re.compile(r"\bpreventive\s+maintenance\s+interval\b", re.IGNORECASE),
+    re.compile(r"\bscheduled\s+service\b", re.IGNORECASE),
+]
+
+# Ungrounded suction terminology patterns (rewriting suction pressure as suction head)
+UNGROUNDED_SUCTION_TERMINOLOGY_PATTERNS = [
+    re.compile(r"\b(?:low\s+)?suction\s+head\b", re.IGNORECASE),
 ]
 
 
@@ -671,7 +684,8 @@ STRICT INSTRUCTIONS:
    Do NOT invent the engineering mechanism by which that intervention would have changed the incident.
    - Prefer: "may have provided an opportunity to investigate..." or "may have provided an opportunity to identify or rule out [condition] as a contributing maintenance concern".
    - Do NOT claim alignment correction "would reduce vibration" or "could potentially have reduced mechanical vibration" unless evidence explicitly proves that.
-   - SUCTION PRESSURE: Evidence only establishes: technician observed suction pressure = 0.8 bar; stated normal = 1.6 bar. There is no suction-pressure time series proving a drop. Change wording to: "recorded low suction pressure" or equivalent. Do NOT say pressure "dropped" or "a drop in suction pressure" unless retrieved evidence contains a time series showing that change.
+   - SUCTION PRESSURE TERMINOLOGY: Evidence only establishes: technician observed suction pressure = 0.8 bar; stated normal = 1.6 bar. There is no suction-pressure time series proving a drop. Change wording to: "recorded low suction pressure" or equivalent. Do NOT say pressure "dropped" or "a drop in suction pressure" unless retrieved evidence contains a time series showing that change. Do NOT rewrite this as "low suction head"; use "recorded low suction pressure". Verification check purpose should use this same evidence terminology (e.g., "Identify potential sources of recorded low suction pressure.").
+   - MAINTENANCE EVIDENCE GROUNDING: Retrieved EVD-005 states the alignment condition was "recommended for laser recheck on the next major planned turnaround". Require wording grounded to that exact concept: "recommended for laser recheck on the next major planned turnaround". Do NOT introduce "PM routine", "preventive maintenance interval", or "scheduled service" unless explicitly present in evidence.
    - Do NOT use terms like "suction starvation", "cavitation", "air ingress", or "blockage" unless retrieved evidence explicitly uses them. Use "the recorded low suction pressure condition" or "abnormal suction-side condition".
    - SYSTEM ATTRIBUTION: The retrieved system evidence is PLC / SCADA. Do NOT introduce "DCS". Use: "Review PLC/SCADA alarm configuration for P-204 vibration warning thresholds."
    - ASSET TRIP ATTRIBUTION: The verified event is: P-204 protective shutdown / vibration trip recorded by PLC-204. Do NOT claim M-204 or motor itself tripped unless evidence explicitly says that. Use: "prior to the recorded P-204 vibration trip/shutdown" or equivalent.
@@ -700,6 +714,7 @@ GOOD Example 1 (Rising Vibration):
 GOOD Example 2 (Maintenance Work Order):
 - hypothetical_intervention: "Follow-up on the previously documented alignment offset may have provided an earlier opportunity to determine whether the documented alignment condition required correction before subsequent operation."
 - potential_effect: "May have provided an opportunity to identify or rule out the documented alignment condition as a contributing maintenance concern."
+- evidence_basis: "CMMS record documents +0.08 mm angular offset recommended for laser recheck on the next major planned turnaround."
 - uncertainties: ["No evidence confirms that the documented alignment offset directly contributed to the incident."]
 - verification_checks: check: "Review CMMS historical work orders for M-204.", purpose: "Determine whether turnaround laser recheck was completed."
 
@@ -707,7 +722,7 @@ GOOD Example 3 (Suction Pressure Observation):
 - hypothetical_intervention: "Earlier inspection of the suction-side piping may have provided an opportunity to identify the recorded abnormal suction-side condition."
 - potential_effect: "Might have provided an opportunity to investigate the recorded low suction pressure condition before operational escalation."
 - uncertainties: ["Cannot be confirmed from available evidence when the low suction pressure condition first developed relative to normal 1.6 bar."]
-- verification_checks: check: "Review available suction-side inspection records and suction-pressure history.", purpose: "Identify potential sources of low suction head."
+- verification_checks: check: "Review available suction-side inspection records and suction-pressure history.", purpose: "Identify potential sources of recorded low suction pressure."
 
 GOOD Example 4 (VFD Telemetry Review):
 - hypothetical_intervention: "Earlier review of VFD telemetry could potentially have provided an earlier opportunity to investigate the abnormal VFD condition recorded before later incident events."
@@ -1059,6 +1074,58 @@ Formulate potential prevention paths formatted according to the requested struct
                     + f": '{match.group(0)}'. State only evidence-grounded uncertainty (e.g. 'No evidence confirms that the documented alignment offset directly contributed to the incident.')."
                 )
 
+    def validate_ungrounded_maintenance_intervals(
+        self,
+        text: str,
+        retrieval_result: Optional[Dict[str, Any]],
+        field_name: str,
+        path_id: str = "",
+    ) -> None:
+        """Validate that text does not introduce ungrounded maintenance intervals (e.g. PM routine, preventive maintenance interval, scheduled service)."""
+        if not text:
+            return
+
+        retrieved_text_corpus = self._extract_retrieved_text_corpus(retrieval_result)
+        for pattern in UNGROUNDED_MAINTENANCE_INTERVAL_PATTERNS:
+            match = pattern.search(text)
+            if match:
+                matched_str = match.group(0).lower()
+                is_grounded = bool(
+                    retrieved_text_corpus and (pattern.search(retrieved_text_corpus) or matched_str in retrieved_text_corpus)
+                )
+                if not is_grounded:
+                    raise PreventionValidationError(
+                        f"Ungrounded maintenance interval detected in {field_name}"
+                        + (f" for path '{path_id}'" if path_id else "")
+                        + f": '{match.group(0)}'. Retrieved EVD-005 states the alignment condition was recommended for laser recheck on the next major planned turnaround. Do not introduce 'PM routine', 'preventive maintenance interval', or 'scheduled service'; use 'recommended for laser recheck on the next major planned turnaround'."
+                    )
+
+    def validate_ungrounded_suction_terminology(
+        self,
+        text: str,
+        retrieval_result: Optional[Dict[str, Any]],
+        field_name: str,
+        path_id: str = "",
+    ) -> None:
+        """Validate that suction pressure (0.8 bar vs normal 1.6 bar) is not rewritten as 'suction head' or 'low suction head'."""
+        if not text:
+            return
+
+        retrieved_text_corpus = self._extract_retrieved_text_corpus(retrieval_result)
+        for pattern in UNGROUNDED_SUCTION_TERMINOLOGY_PATTERNS:
+            match = pattern.search(text)
+            if match:
+                matched_str = match.group(0).lower()
+                is_grounded = bool(
+                    retrieved_text_corpus and (pattern.search(retrieved_text_corpus) or matched_str in retrieved_text_corpus)
+                )
+                if not is_grounded:
+                    raise PreventionValidationError(
+                        f"Ungrounded suction terminology detected in {field_name}"
+                        + (f" for path '{path_id}'" if path_id else "")
+                        + f": '{match.group(0)}'. Evidence records suction pressure = 0.8 bar (normal 1.6 bar). Do not rewrite this as 'low suction head'; use 'recorded low suction pressure'."
+                    )
+
     def validate_grounded_field(
         self,
         text: str,
@@ -1078,6 +1145,8 @@ Formulate potential prevention paths formatted according to the requested struct
         self.validate_ungrounded_equipment_and_systems(text, retrieval_result, field_name, path_id)
         self.validate_ungrounded_asset_states(text, retrieval_result, field_name, path_id)
         self.validate_ungrounded_instrumentation_and_telemetry(text, retrieval_result, field_name, path_id)
+        self.validate_ungrounded_maintenance_intervals(text, retrieval_result, field_name, path_id)
+        self.validate_ungrounded_suction_terminology(text, retrieval_result, field_name, path_id)
 
     def validate_unknown(
         self,
@@ -1189,6 +1258,8 @@ Formulate potential prevention paths formatted according to the requested struct
             self.validate_ungrounded_equipment_and_systems(u, retrieval_result, "uncertainties", path_id)
             self.validate_ungrounded_asset_states(u, retrieval_result, "uncertainties", path_id)
             self.validate_ungrounded_instrumentation_and_telemetry(u, retrieval_result, "uncertainties", path_id)
+            self.validate_ungrounded_maintenance_intervals(u, retrieval_result, "uncertainties", path_id)
+            self.validate_ungrounded_suction_terminology(u, retrieval_result, "uncertainties", path_id)
             self.validate_speculative_uncertainty_wording(u, "uncertainties", path_id)
 
         # 4. Mandatory Hypothetical/Conditional Framing
@@ -1441,6 +1512,8 @@ Formulate potential prevention paths formatted according to the requested struct
                 f"10. SYSTEM & ASSET GROUNDING: Retrieved system evidence is PLC / SCADA (never use 'DCS'). Retrieved shutdown is P-204 protective shutdown/vibration trip (never claim motor or M-204 tripped).\n"
                 f"11. NO UNGROUNDED INSTRUMENTATION: Do NOT invent tank levels, differential pressure across strainer, VFD trace buffer, or phase currents in verification checks.\n"
                 f"12. UNCERTAINTIES GROUNDING: Remove speculative phrasing like 'other factors may have become more prominent'.\n"
+                f"13. MAINTENANCE INTERVAL GROUNDING: Retrieved EVD-005 states the alignment condition was 'recommended for laser recheck on the next major planned turnaround'. Do NOT introduce 'PM routine', 'preventive maintenance interval', or 'scheduled service'; use 'recommended for laser recheck on the next major planned turnaround'.\n"
+                f"14. SUCTION TERMINOLOGY: Do NOT rewrite suction pressure as 'low suction head'; use 'recorded low suction pressure' in interventions, effects, and verification check purposes.\n"
                 f"Regenerate the entire structured JSON response strictly adhering to these requirements.\n"
                 f"</VALIDATOR_CORRECTION_FEEDBACK>"
             )
