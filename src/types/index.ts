@@ -236,6 +236,11 @@ export interface ReplayEvidenceReference {
   asset_id?: string | null;
   timestamp?: string | null;
   original_reference?: string | null;
+  // Aliases for camelCase API responses
+  evidenceId?: string;
+  sourceType?: string;
+  assetId?: string | null;
+  originalReference?: string | null;
 }
 
 export interface ReplayRecordedValue {
@@ -243,6 +248,7 @@ export interface ReplayRecordedValue {
   value: any;
   unit?: string | null;
   source_evidence_id?: string | null;
+  sourceEvidenceId?: string | null;
 }
 
 export interface ReplayRelationshipContext {
@@ -257,6 +263,11 @@ export interface ReplayAssetState {
   asset_name?: string | null;
   operational_status?: string | null;
   recorded_values: ReplayRecordedValue[];
+  // Aliases
+  assetId?: string;
+  assetName?: string | null;
+  operationalStatus?: string | null;
+  recordedValues?: ReplayRecordedValue[];
 }
 
 export interface ReplayEvent {
@@ -275,6 +286,15 @@ export interface ReplayEvent {
   graph_relationships: ReplayRelationshipContext[];
   asset_state?: ReplayAssetState | null;
   recorded_values: ReplayRecordedValue[];
+  // Aliases
+  eventId?: string;
+  relativeSeconds?: number;
+  assetId?: string;
+  eventType?: string;
+  relatedAssets?: string[];
+  graphRelationships?: ReplayRelationshipContext[];
+  assetState?: ReplayAssetState | null;
+  recordedValues?: ReplayRecordedValue[];
 }
 
 export interface ReplaySummary {
@@ -282,11 +302,18 @@ export interface ReplaySummary {
   asset_count: number;
   evidence_count: number;
   duration_seconds: number;
+  // Aliases
+  eventCount?: number;
+  assetCount?: number;
+  evidenceCount?: number;
+  durationSeconds?: number;
 }
 
 export interface ReplayWindowFilter {
   start_offset_seconds?: number | null;
   end_offset_seconds?: number | null;
+  startOffsetSeconds?: number | null;
+  endOffsetSeconds?: number | null;
 }
 
 export interface IncidentReplayResponse {
@@ -297,7 +324,79 @@ export interface IncidentReplayResponse {
   summary: ReplaySummary;
   events: ReplayEvent[];
   window_filter?: ReplayWindowFilter | null;
+  // Aliases
+  incidentId?: string;
+  startTimestamp?: string | null;
+  endTimestamp?: string | null;
+  durationSeconds?: number;
+  windowFilter?: ReplayWindowFilter | null;
 }
+
+// ============================================================================
+// RETRACE Potential Prevention Paths Interfaces
+// ============================================================================
+
+export interface PreventionVerificationCheck {
+  check: string;
+  purpose: string;
+}
+
+export interface PotentialPreventionPath {
+  path_id: string;
+  title: string;
+  hypothetical_intervention: string;
+  potential_effect: string;
+  evidence_basis: string;
+  evidence_ids: string[];
+  event_ids: string[];
+  asset_ids: string[];
+  uncertainties: string[];
+  verification_checks: PreventionVerificationCheck[];
+  // CamelCase aliases
+  pathId?: string;
+  hypotheticalIntervention?: string;
+  potentialEffect?: string;
+  evidenceBasis?: string;
+  evidenceIds?: string[];
+  eventIds?: string[];
+  assetIds?: string[];
+  verificationChecks?: PreventionVerificationCheck[];
+}
+
+export interface PreventionEvidenceCitation {
+  evidence_id: string;
+  chunk_id?: string | null;
+  asset_id?: string | null;
+  filename: string;
+  source_type: string;
+  timestamp?: string | null;
+  original_reference?: string | null;
+  // CamelCase aliases
+  evidenceId?: string;
+  chunkId?: string | null;
+  assetId?: string | null;
+  sourceType?: string;
+  originalReference?: string | null;
+}
+
+export interface PreventionPathsRequest {
+  query?: string;
+  top_k?: number;
+  topK?: number;
+}
+
+export interface PreventionPathsResponse {
+  incident_id: string;
+  summary: string;
+  paths: PotentialPreventionPath[];
+  unknowns: string[];
+  sources_used: PreventionEvidenceCitation[];
+  disclaimer: string;
+  // CamelCase aliases
+  incidentId?: string;
+  sourcesUsed?: PreventionEvidenceCitation[];
+}
+
 
 
 

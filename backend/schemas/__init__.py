@@ -3,7 +3,16 @@ from backend.schemas.incident import Incident, IncidentEvent
 from backend.schemas.asset import Asset, AssetRelationship
 from backend.schemas.evidence import Evidence
 from backend.schemas.finding import Finding, FindingClassification
-from backend.schemas.prevention import PreventionNode, PreventionSafeguard, PreventionScenario
+from backend.schemas.prevention import (
+    PreventionNode,
+    PreventionSafeguard,
+    PreventionScenario,
+    PreventionPathsRequest,
+    PreventionVerificationCheck,
+    PotentialPreventionPath,
+    PreventionEvidenceCitation,
+    PreventionPathsResponse,
+)
 from backend.schemas.investigation import InvestigationQueryRequest, InvestigationQueryResponse
 from backend.schemas.context import IncidentContextResponse
 from backend.schemas.upload import UploadedEvidence, EvidenceUploadResponse
@@ -32,6 +41,11 @@ __all__ = [
     "PreventionNode",
     "PreventionSafeguard",
     "PreventionScenario",
+    "PreventionPathsRequest",
+    "PreventionVerificationCheck",
+    "PotentialPreventionPath",
+    "PreventionEvidenceCitation",
+    "PreventionPathsResponse",
     "InvestigationQueryRequest",
     "InvestigationQueryResponse",
     "IncidentContextResponse",

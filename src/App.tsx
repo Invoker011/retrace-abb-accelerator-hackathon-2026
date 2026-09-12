@@ -153,6 +153,9 @@ export default function App() {
 
           {activeView === 'replay' && (
             <IncidentReplayView
+              incidentId={incident.id}
+              evidenceList={evidenceList}
+              onSelectEvidence={handleOpenEvidenceModal}
               events={events}
               assets={assets}
             />

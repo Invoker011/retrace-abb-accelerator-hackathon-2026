@@ -8,7 +8,15 @@ from backend.schemas.asset import Asset, AssetRelationship
 from backend.schemas.finding import Finding
 from backend.schemas.evidence import Evidence
 from backend.schemas.upload import UploadedEvidence
-from backend.schemas.prevention import PreventionScenario
+from backend.schemas.prevention import (
+    PreventionScenario,
+    PreventionPathsRequest,
+    PreventionPathsResponse,
+)
+from backend.services.prevention_service import (
+    get_prevention_paths_service,
+    PreventionPathsError,
+)
 from backend.schemas.context import IncidentContextResponse
 from backend.schemas.replay import IncidentReplayResponse
 from backend.services.incident_replay_service import get_incident_replay_service
@@ -374,6 +382,31 @@ def get_incident_replay(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to reconstruct incident replay.",
         )
+
+
+@router.post(
+    "/{incident_id}/prevention-paths",
+    response_model=PreventionPathsResponse,
+    summary="Explore grounded counterfactual potential prevention paths for an incident",
+)
+def explore_prevention_paths(
+    incident_id: str,
+    payload: PreventionPathsRequest = PreventionPathsRequest(),
+) -> PreventionPathsResponse:
+    """Investigate evidence-grounded hypothetical prevention paths and mitigation opportunities."""
+    try:
+        service = get_prevention_paths_service()
+        return service.get_prevention_paths(incident_id=incident_id, request=payload)
+    except PreventionPathsError as e:
+        raise HTTPException(status_code=e.status_code, detail=e.message)
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to generate potential prevention paths.",
+        )
+
 
 
 
