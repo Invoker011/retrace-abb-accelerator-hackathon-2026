@@ -89,14 +89,35 @@ STRICT COUNTERFACTUAL AND NON-CAUSAL RULES:
    - BAD: "Earlier inspection of P-204."
 5. NEVER output causal certainty:
    Do NOT use: 'would have prevented', 'would have avoided', 'would have stopped', 'definitely prevented', 'definitely', 'certainly', 'guaranteed', 'caused the failure', 'root cause was', 'therefore caused', 'would not have occurred', 'this caused the incident', 'this was the root cause', 'if X had happened, the failure would not have occurred'.
-6. NO EXTERNAL TEXTBOOK THEORIES:
-   Do NOT introduce unsupported external engineering theory or textbook assumptions (such as asserting 'low suction pressure causes cavitation' or 'cavitation caused the damage') unless retrieved engineering documentation explicitly states that.
-   State observed facts in evidence_basis (e.g. 'EVD-006 records suction pressure at 0.8 bar compared with a stated normal 1.6 bar.').
-7. CITATIONS:
+
+NUMERIC THRESHOLD AND OPERATING ZONE CONSISTENCY:
+6. Strictly adhere to numeric ranges and operating zones defined in retrieved engineering manuals:
+   - Zone A: < 2.3 mm/s (new commissioning).
+   - Zone B: 2.3–4.5 mm/s (unrestricted long-term operation).
+   - Zone C: 4.5–7.1 mm/s (restricted short-term operation / warning alert).
+   - Zone D: > 7.1 mm/s (dangerous / immediate trip threshold).
+   - NEVER assign a measurement to the wrong zone or trip threshold.
+   - 6.7 mm/s at 10:14:15 is in Zone C (warning/alert range 4.5–7.1 mm/s). NEVER state that 6.7 mm/s entered Zone D or reached the trip threshold.
+   - 8.8 mm/s at 10:14:20 exceeds the Zone D trip threshold (> 7.1 mm/s).
+
+EPISTEMIC NEUTRALITY AND NO UNSUPPORTED THEORIES:
+7. A prevention path may identify:
+   - earlier detection opportunity
+   - earlier review opportunity
+   - earlier maintenance follow-up
+   - earlier inspection opportunity
+   Do NOT invent the engineering mechanism by which that intervention would have changed the incident.
+   - Prefer: "may have provided an opportunity to investigate..." or "may have provided an opportunity to identify or rule out [condition] as a contributing maintenance concern".
+   - Do NOT claim alignment correction "would reduce vibration" or "could potentially have reduced mechanical vibration" unless evidence explicitly proves that.
+   - Do NOT use terms like "suction starvation", "cavitation", "air ingress", or "blockage" unless retrieved evidence explicitly uses them. Use "the recorded low suction pressure condition" or "abnormal suction-side condition".
+   - Do NOT infer that a VFD warning indicates "an abnormal load condition on the motor" unless retrieved VFD/manual evidence explicitly states it. Use "could potentially have provided an earlier opportunity to investigate the abnormal VFD condition recorded before later incident events."
+   - In UNKNOWNS: Remove unsupported speculative examples. Do NOT write "(e.g., mechanical binding, electrical fault)". State plainly: "The specific reason for the VFD overcurrent warning is not established by the available evidence." Unknowns must not introduce possible causes that were never retrieved.
+
+8. CITATIONS:
    Every prevention path must cite only valid evidence_ids, event_ids, and asset_ids that appear explicitly in the retrieved context. Never invent IDs.
-8. UNCERTAINTIES:
+9. UNCERTAINTIES:
    Every path MUST include specific uncertainties explaining why causality or outcome cannot be proven from the evidence.
-9. ADVISORY SAFETY:
+10. ADVISORY SAFETY:
    RETRACE is advisory only. Do not issue direct equipment-control instructions (do not command start pump, stop pump, reset VFD, bypass interlock, override protection, disable safety, energize equipment, change PLC logic, or open/close valves).
    Advisory maintenance review and diagnostic inspection suggestions are permitted.
 
@@ -106,13 +127,13 @@ GOOD Example 1 (Rising Vibration Telemetry):
 {
   "path_id": "PP-001",
   "title": "Earlier response to rising vibration thresholds",
-  "hypothetical_intervention": "Earlier investigation of the rising vibration could potentially have provided an opportunity to identify the developing abnormal condition.",
-  "potential_effect": "Might have provided an opportunity to diagnose elevated vibration before reaching the trip threshold.",
-  "evidence_basis": "Historian recorded vibration rising from 2.1 to 8.8 mm/s; manual specifies 4.5 mm/s warning threshold.",
+  "hypothetical_intervention": "Earlier investigation of the rising vibration when exceeding Zone B (4.5 mm/s) could potentially have provided an opportunity to identify the developing abnormal condition.",
+  "potential_effect": "Might have provided an opportunity to diagnose elevated vibration in Zone C (4.5–7.1 mm/s) before reaching the > 7.1 mm/s Zone D trip threshold.",
+  "evidence_basis": "Historian recorded vibration rising from 2.1 to 6.7 mm/s (Zone C warning) and subsequently 8.8 mm/s (exceeding Zone D 7.1 mm/s trip limit); manual specifies 4.5 mm/s warning threshold.",
   "evidence_ids": ["EVD-003", "EVD-004"],
   "event_ids": ["EVT-003"],
   "asset_ids": ["P-204"],
-  "uncertainties": ["The rapid speed of vibration rise may have limited the available reaction window."],
+  "uncertainties": ["The rapid speed of vibration rise may have limited the available reaction window before reaching the trip threshold."],
   "verification_checks": [
     {
       "check": "Examine DCS alarm configuration for Zone B pre-warning.",
@@ -125,8 +146,8 @@ GOOD Example 2 (Maintenance Work Order Follow-up):
 {
   "path_id": "PP-002",
   "title": "Follow-up on previously documented shaft alignment offset",
-  "hypothetical_intervention": "Follow-up on the previously documented alignment offset may have provided an earlier opportunity for inspection.",
-  "potential_effect": "Could potentially have reduced mechanical vibration during subsequent operation.",
+  "hypothetical_intervention": "Follow-up on the previously documented alignment offset may have provided an earlier opportunity to determine whether the documented alignment condition required correction before subsequent operation.",
+  "potential_effect": "May have provided an opportunity to identify or rule out the documented alignment condition as a contributing maintenance concern.",
   "evidence_basis": "CMMS record documents +0.08 mm angular offset noted for future laser recheck.",
   "evidence_ids": ["EVD-005"],
   "asset_ids": ["M-204", "P-204"],
@@ -143,8 +164,8 @@ GOOD Example 3 (Technician Suction Observation):
 {
   "path_id": "PP-003",
   "title": "Earlier inspection of suction-side operating conditions",
-  "hypothetical_intervention": "Earlier inspection of the suction-side piping may have provided an opportunity to identify abnormal restriction.",
-  "potential_effect": "Might have mitigated persistent suction starvation.",
+  "hypothetical_intervention": "Earlier inspection of the suction-side piping may have provided an opportunity to identify the recorded abnormal suction-side condition.",
+  "potential_effect": "Might have provided an opportunity to investigate the low suction pressure condition before operational escalation.",
   "evidence_basis": "Technician logged suction gauge reading 0.8 bar versus normal 1.6 bar and baseplate shudder.",
   "evidence_ids": ["EVD-006"],
   "event_ids": ["EVT-004"],
@@ -154,6 +175,24 @@ GOOD Example 3 (Technician Suction Observation):
     {
       "check": "Inspect suction-side strainer and tank levels.",
       "purpose": "Verify differential pressure across strainer."
+    }
+  ]
+}
+
+GOOD Example 4 (VFD Telemetry Review):
+{
+  "path_id": "PP-004",
+  "title": "Earlier review of pre-trip VFD warning telemetry",
+  "hypothetical_intervention": "Earlier review of VFD telemetry could potentially have provided an earlier opportunity to investigate the abnormal VFD condition recorded before later incident events.",
+  "potential_effect": "Might have provided an opportunity to review inverter operating parameters before escalation.",
+  "evidence_basis": "VFD event log recorded fault code 0x2310 overcurrent warning prior to motor trip.",
+  "evidence_ids": ["EVD-001"],
+  "asset_ids": ["VFD-204"],
+  "uncertainties": ["The specific reason for the VFD overcurrent warning is not established by the available evidence."],
+  "verification_checks": [
+    {
+      "check": "Export VFD diagnostic trace buffer.",
+      "purpose": "Review phase currents preceding the overcurrent event."
     }
   ]
 }
@@ -260,12 +299,63 @@ POTENTIAL_EFFECT_OPPORTUNITY_REGEX = re.compile(
     re.IGNORECASE,
 )
 
+# Numeric threshold contradiction patterns (contradicting retrieved ISO/manual vibration zone ranges)
+ZONE_D_THRESHOLD_CONTRADICTION_PATTERNS = [
+    # 1. Direct mislabeling of <= 7.1 values (like 6.7 mm/s) as Zone D or trip
+    re.compile(
+        r"\b(?:6\.7|6\.70|[0-6]\.[0-9]+|7\.0[0-9]*)\s*(?:mm/s)?(?:,\s*|\s+)(?:at\s+[0-9:]+\s+)?(?:was\s+|is\s+|as\s+)?(?:entering|entered|reaching|reached|in|classified\s+as|surpassing|surpassed)\s+(?:the\s+)?(?:zone\s+d|trip\s+(?:threshold|limit))\b",
+        re.IGNORECASE,
+    ),
+    # 2. Zone D or trip with value <= 7.1 (e.g. Zone D (6.7 mm/s) or Zone D trip at 6.7 mm/s)
+    re.compile(
+        r"\b(?:zone\s+d|trip\s+(?:threshold|limit))\b(?:\s+(?:trip|threshold|limit))?\s*(?:\([^\)]*|\s+at|\s+of|\s+with|\s+was|\s+is)?\s*(?:6\.7|6\.70|[0-6]\.[0-9]+|7\.0[0-9]*)\s*(?:mm/s)?\b",
+        re.IGNORECASE,
+    ),
+    # 3. Parenthetical Zone D or trip immediately following <= 7.1 value (e.g. 6.7 mm/s (Zone D))
+    re.compile(
+        r"\b(?:6\.7|6\.70|[0-6]\.[0-9]+|7\.0[0-9]*)\s*(?:mm/s)?\s*\([^)]*\b(?:zone\s+d|trip)\b[^)]*\)",
+        re.IGNORECASE,
+    ),
+    # 4. Entered / reached Zone D or trip at <= 7.1 (e.g. reached Zone D at 6.7 mm/s)
+    re.compile(
+        r"\b(?:entered|entering|reached|reaching|surpassed|surpassing)\s+(?:zone\s+d|(?:the\s+)?trip\s+(?:threshold|limit))\s+(?:at|with)\s+(?:6\.7|6\.70|[0-6]\.[0-9]+|7\.0[0-9]*)\s*(?:mm/s)?\b",
+        re.IGNORECASE,
+    ),
+    # 5. <= 7.1 value claimed to exceed / surpass / reach Zone D or trip threshold
+    re.compile(
+        r"\b(?:at\s+)?(?:6\.7|6\.70|[0-6]\.[0-9]+|7\.0[0-9]*)\s*(?:mm/s)?(?:,\s*|\s+)(?:at\s+[0-9:]+\s+)?(?:exceeded|exceeding|surpassed|surpassing|tripped|reached|reaching)\s+(?:the\s+)?(?:zone\s+d|trip\s+(?:threshold|limit))\b",
+        re.IGNORECASE,
+    ),
+    # 6. Mislabeling zone definitions (e.g., Zone D = 4.5–7.1 or Zone C > 7.1)
+    re.compile(
+        r"\bzone\s+d\s*(?:is|was|=)?\s*(?:4\.5\s*[-–]\s*7\.1|4\.5\s*to\s*7\.1|< ?7\.1)\b",
+        re.IGNORECASE,
+    ),
+    re.compile(
+        r"\bzone\s+c\s*(?:is|was|=)?\s*(?:>\s*7\.1|above\s+7\.1)\b",
+        re.IGNORECASE,
+    ),
+]
+
 # Unsupported external engineering theory patterns (textbook causality assertions without source backing)
+# Must NOT be introduced unless explicitly present in retrieved evidence context.
 UNSUPPORTED_THEORY_PATTERNS = [
+    # Suction and fluid dynamics theories
+    re.compile(r"\bsuction\s+starvation\b", re.IGNORECASE),
+    re.compile(r"\bcavitation\b", re.IGNORECASE),
+    re.compile(r"\bair\s+ingress\b", re.IGNORECASE),
+    re.compile(r"\b(?:suction\s+(?:line\s+)?)?blockage\b", re.IGNORECASE),
     re.compile(r"\blow\s+suction\s+pressure\s+causes\s+cavitation\b", re.IGNORECASE),
     re.compile(r"\bcauses\s+cavitation\b", re.IGNORECASE),
     re.compile(r"\bcavitation\s+caused\b", re.IGNORECASE),
+    # Motor, drive, and electrical speculative causes
+    re.compile(r"\bmechanical\s+binding\b", re.IGNORECASE),
+    re.compile(r"\belectrical\s+fault\b", re.IGNORECASE),
+    re.compile(r"\babnormal\s+load\s+condition\b", re.IGNORECASE),
+    re.compile(r"\babnormal\s+load\b", re.IGNORECASE),
     re.compile(r"\bbearing\s+failure\s+was\s+caused\s+by\b", re.IGNORECASE),
+    # Causal vibration reduction assertions (e.g. claiming alignment correction reduces vibration)
+    re.compile(r"\b(?:reduce[ds]?|reducing)\s+(?:mechanical\s+)?vibration\b", re.IGNORECASE),
 ]
 
 
@@ -507,11 +597,26 @@ STRICT INSTRUCTIONS:
    - BAD: "Earlier inspection of P-204."
 5. NEVER output causal certainty:
    Do NOT use: 'would have prevented', 'would have avoided', 'would have stopped', 'definitely prevented', 'definitely', 'certainly', 'guaranteed', 'caused the failure', 'root cause was', 'therefore caused', 'would not have occurred', 'this caused the incident', 'this was the root cause'.
-6. PREFERRED CONDITIONAL PHRASING:
-   Use 'could potentially have reduced', 'may have provided an earlier opportunity to', 'might have mitigated', 'is a plausible prevention path', 'cannot be confirmed from available evidence'.
-7. NO UNSUPPORTED ENGINEERING THEORY:
-   Do not state textbook claims like 'low suction pressure causes cavitation' unless retrieved engineering documentation explicitly says so.
-   State factual measurements in evidence_basis (e.g. 'EVD-006 records suction pressure at 0.8 bar compared with normal 1.6 bar.').
+6. NUMERIC THRESHOLD AND OPERATING ZONE ACCURACY:
+   Strictly respect numeric ranges and operating zones in retrieved engineering manuals:
+   - Zone A: < 2.3 mm/s
+   - Zone B: 2.3–4.5 mm/s
+   - Zone C: 4.5–7.1 mm/s (warning alert)
+   - Zone D: > 7.1 mm/s (trip threshold)
+   6.7 mm/s at 10:14:15 is in Zone C. NEVER claim 6.7 mm/s entered Zone D or reached trip threshold.
+   8.8 mm/s at 10:14:20 exceeds the Zone D trip threshold (> 7.1 mm/s).
+7. EPISTEMIC NEUTRALITY AND NO UNSUPPORTED THEORIES:
+   A prevention path may identify:
+   - earlier detection opportunity
+   - earlier review opportunity
+   - earlier maintenance follow-up
+   - earlier inspection opportunity
+   Do NOT invent the engineering mechanism by which that intervention would have changed the incident.
+   - Prefer: "may have provided an opportunity to investigate..." or "may have provided an opportunity to identify or rule out [condition] as a contributing maintenance concern".
+   - Do NOT claim alignment correction "would reduce vibration" or "could potentially have reduced mechanical vibration" unless evidence explicitly proves that.
+   - Do NOT use terms like "suction starvation", "cavitation", "air ingress", or "blockage" unless retrieved evidence explicitly uses them. Use "the recorded low suction pressure condition" or "abnormal suction-side condition".
+   - Do NOT infer that a VFD warning indicates "an abnormal load condition on the motor" unless retrieved VFD/manual evidence explicitly states it. Use "could potentially have provided an earlier opportunity to investigate the abnormal VFD condition recorded before later incident events."
+   - In UNKNOWNS: Remove unsupported speculative examples. Do NOT write "(e.g., mechanical binding, electrical fault)". State plainly: "The specific reason for the VFD overcurrent warning is not established by the available evidence." Unknowns must not introduce possible causes that were never retrieved.
 8. MANDATORY UNCERTAINTIES:
    Every prevention path MUST state specific uncertainties.
 9. CITATIONS:
@@ -522,16 +627,20 @@ STRICT INSTRUCTIONS:
 STRUCTURED EXAMPLES OF VALID PREVENTION PATHS:
 
 GOOD Example 1 (Rising Vibration):
-- hypothetical_intervention: "Earlier investigation of the rising vibration could potentially have provided an opportunity to identify the developing abnormal condition."
-- potential_effect: "Might have provided an opportunity to diagnose elevated vibration before reaching the trip threshold."
+- hypothetical_intervention: "Earlier investigation of the rising vibration when exceeding Zone B (4.5 mm/s) could potentially have provided an opportunity to identify the developing abnormal condition."
+- potential_effect: "Might have provided an opportunity to diagnose elevated vibration in Zone C (4.5–7.1 mm/s) before reaching the > 7.1 mm/s Zone D trip threshold."
 
 GOOD Example 2 (Maintenance Work Order):
-- hypothetical_intervention: "Follow-up on the previously documented alignment offset may have provided an earlier opportunity for inspection."
-- potential_effect: "Could potentially have reduced mechanical vibration during subsequent operation."
+- hypothetical_intervention: "Follow-up on the previously documented alignment offset may have provided an earlier opportunity to determine whether the documented alignment condition required correction before subsequent operation."
+- potential_effect: "May have provided an opportunity to identify or rule out the documented alignment condition as a contributing maintenance concern."
 
 GOOD Example 3 (Suction Pressure Restriction):
-- hypothetical_intervention: "Earlier inspection of the suction-side piping may have provided an opportunity to identify abnormal restriction."
-- potential_effect: "Might have mitigated persistent suction starvation."
+- hypothetical_intervention: "Earlier inspection of the suction-side piping may have provided an opportunity to identify the recorded abnormal suction-side condition."
+- potential_effect: "Might have provided an opportunity to investigate the low suction pressure condition before operational escalation."
+
+GOOD Example 4 (VFD Telemetry Review):
+- hypothetical_intervention: "Earlier review of VFD telemetry could potentially have provided an earlier opportunity to investigate the abnormal VFD condition recorded before later incident events."
+- potential_effect: "Might have provided an opportunity to review inverter operating parameters before escalation."
 </SYSTEM_DIRECTIVE>
 
 <UNTRUSTED_EVIDENCE_DATA>
@@ -656,6 +765,52 @@ Formulate potential prevention paths formatted according to the requested struct
                     + f": '{match.group(0)}'. RETRACE is advisory only and cannot command machinery actuation."
                 )
 
+    def _extract_retrieved_text_corpus(self, retrieval_result: Optional[Dict[str, Any]]) -> str:
+        """Extract all text from retrieved evidence, timeline, and graph for grounding checks."""
+        if not retrieval_result:
+            return ""
+
+        chunks: List[str] = []
+        for ev in retrieval_result.get("evidence", []):
+            if isinstance(ev, dict):
+                for k in ("text", "content", "title", "asset_id", "source_type"):
+                    v = ev.get(k)
+                    if v and isinstance(v, str):
+                        chunks.append(v)
+            elif hasattr(ev, "text"):
+                chunks.append(str(getattr(ev, "text", "")))
+
+        for evt in retrieval_result.get("temporal_context", []):
+            if isinstance(evt, dict):
+                for k in ("description", "event_type", "asset_id"):
+                    v = evt.get(k)
+                    if v and isinstance(v, str):
+                        chunks.append(v)
+            elif hasattr(evt, "description"):
+                chunks.append(str(getattr(evt, "description", "")))
+
+        graph_ctx = retrieval_result.get("graph_context", {})
+        if isinstance(graph_ctx, dict):
+            for rel in graph_ctx.get("relationships", []):
+                if isinstance(rel, dict):
+                    chunks.append(f"{rel.get('source_id')} {rel.get('type')} {rel.get('target_id')}")
+
+        return " ".join(chunks).lower()
+
+    def validate_threshold_consistency(self, text: str, field_name: str, path_id: str = "") -> None:
+        """Validate that text does not contradict numerical threshold ranges or misassign operating zones."""
+        if not text:
+            return
+
+        for pattern in ZONE_D_THRESHOLD_CONTRADICTION_PATTERNS:
+            match = pattern.search(text)
+            if match:
+                raise PreventionValidationError(
+                    f"Numerical threshold contradiction detected in {field_name}"
+                    + (f" for path '{path_id}'" if path_id else "")
+                    + f": '{match.group(0)}'. 6.7 mm/s is in Zone C (4.5–7.1 mm/s) and cannot be labeled Zone D or trip (> 7.1 mm/s)."
+                )
+
     def validate_unsupported_engineering_theory(
         self,
         text: str,
@@ -663,30 +818,45 @@ Formulate potential prevention paths formatted according to the requested struct
         field_name: str,
         path_id: str = "",
     ) -> None:
-        """Validate that text does not introduce unsupported textbook theories unless explicitly present in evidence."""
+        """Validate that text does not introduce unsupported engineering mechanisms unless explicitly present in evidence."""
         if not text:
             return
+
+        retrieved_text_corpus = self._extract_retrieved_text_corpus(retrieval_result)
 
         for pattern in UNSUPPORTED_THEORY_PATTERNS:
             match = pattern.search(text)
             if match:
-                # Check if retrieved evidence explicitly states this phrase
-                found_in_evidence = False
-                if retrieval_result:
-                    evidence_list = retrieval_result.get("evidence", [])
-                    matched_str = match.group(0).lower()
-                    for ev in evidence_list:
-                        ev_text = (ev.get("text") or "").lower()
-                        if matched_str in ev_text:
-                            found_in_evidence = True
-                            break
-
-                if not found_in_evidence:
+                matched_str = match.group(0).lower()
+                # Check if the matched concept appears in the retrieved evidence
+                is_grounded = bool(retrieved_text_corpus and (pattern.search(retrieved_text_corpus) or matched_str in retrieved_text_corpus))
+                if not is_grounded:
                     raise PreventionValidationError(
-                        f"Unsupported external engineering theory detected in {field_name}"
+                        f"Unsupported engineering mechanism or ungrounded theory detected in {field_name}"
                         + (f" for path '{path_id}'" if path_id else "")
-                        + f": '{match.group(0)}'. Statements must be grounded strictly in retrieved evidence."
+                        + f": '{match.group(0)}'. Such mechanisms must not be asserted unless explicitly present in retrieved evidence."
                     )
+
+    def validate_unknown(
+        self,
+        unknown_text: str,
+        retrieval_result: Optional[Dict[str, Any]],
+    ) -> None:
+        """Validate single unknown item for grounding, counterfactual text, and no invented causes."""
+        if not unknown_text or not unknown_text.strip():
+            raise PreventionValidationError("Unknown item must not be empty.")
+
+        # Reject invented parenthetical example causes like (e.g., mechanical binding, electrical fault)
+        eg_match = re.search(r"\((?:e\.g\.|for\s+example)[^)]*\)", unknown_text, re.IGNORECASE)
+        if eg_match:
+            raise PreventionValidationError(
+                f"Speculative example causes detected in unknown: '{eg_match.group(0)}'. "
+                "Unknowns must state what is unconfirmed without introducing speculative example causes."
+            )
+
+        self.validate_counterfactual_text(unknown_text, "unknowns")
+        self.validate_threshold_consistency(unknown_text, "unknowns")
+        self.validate_unsupported_engineering_theory(unknown_text, retrieval_result, "unknowns")
 
     def validate_prevention_path(
         self,
@@ -771,11 +941,22 @@ Formulate potential prevention paths formatted according to the requested struct
         self.validate_counterfactual_text(potential_effect, "potential_effect", path_id)
         self.validate_counterfactual_text(evidence_basis, "evidence_basis", path_id)
 
+        # 3b. Numeric Threshold Consistency Validation
+        self.validate_threshold_consistency(title, "title", path_id)
+        self.validate_threshold_consistency(hypothetical_intervention, "hypothetical_intervention", path_id)
+        self.validate_threshold_consistency(potential_effect, "potential_effect", path_id)
+        self.validate_threshold_consistency(evidence_basis, "evidence_basis", path_id)
+        for u in raw_uncertainties:
+            self.validate_threshold_consistency(u, "uncertainties", path_id)
+
         # 4. Mandatory Hypothetical/Conditional Framing
         self.validate_hypothetical_intervention(hypothetical_intervention, path_id)
         self.validate_potential_effect(potential_effect, path_id)
 
         # 5. Unsupported External Engineering Theory Validation
+        self.validate_unsupported_engineering_theory(
+            title, retrieval_result, "title", path_id
+        )
         self.validate_unsupported_engineering_theory(
             hypothetical_intervention, retrieval_result, "hypothetical_intervention", path_id
         )
@@ -785,6 +966,10 @@ Formulate potential prevention paths formatted according to the requested struct
         self.validate_unsupported_engineering_theory(
             evidence_basis, retrieval_result, "evidence_basis", path_id
         )
+        for u in raw_uncertainties:
+            self.validate_unsupported_engineering_theory(
+                u, retrieval_result, "uncertainties", path_id
+            )
 
         # 6. Safety Validation (No live actuation / control commands)
         self.validate_safety_instructions(hypothetical_intervention, "hypothetical_intervention", path_id)
@@ -808,6 +993,10 @@ Formulate potential prevention paths formatted according to the requested struct
             self.validate_safety_instructions(c_text, "verification check", path_id)
             self.validate_counterfactual_text(c_text, "verification check", path_id)
             self.validate_counterfactual_text(p_text, "verification check purpose", path_id)
+            self.validate_threshold_consistency(c_text, "verification check", path_id)
+            self.validate_threshold_consistency(p_text, "verification check purpose", path_id)
+            self.validate_unsupported_engineering_theory(c_text, retrieval_result, "verification check", path_id)
+            self.validate_unsupported_engineering_theory(p_text, retrieval_result, "verification check purpose", path_id)
 
             validated_checks.append(PreventionVerificationCheck(check=c_text, purpose=p_text))
 
@@ -891,6 +1080,8 @@ Formulate potential prevention paths formatted according to the requested struct
         """
         raw_summary = str(parsed_json.get("summary", "")).strip()
         self.validate_counterfactual_text(raw_summary, "summary")
+        self.validate_threshold_consistency(raw_summary, "summary")
+        self.validate_unsupported_engineering_theory(raw_summary, retrieval_result, "summary")
 
         raw_paths = parsed_json.get("paths", [])
         if not isinstance(raw_paths, list):
@@ -910,7 +1101,7 @@ Formulate potential prevention paths formatted according to the requested struct
         raw_unknowns = parsed_json.get("unknowns") or []
         unknowns = [str(u).strip() for u in raw_unknowns if str(u).strip()]
         for u in unknowns:
-            self.validate_counterfactual_text(u, "unknowns")
+            self.validate_unknown(u, retrieval_result)
 
         return raw_summary, validated_paths, unknowns
 
@@ -1024,6 +1215,9 @@ Formulate potential prevention paths formatted according to the requested struct
                 f"2. EVERY 'potential_effect' MUST contain conditional language such as: 'may have', 'might have', 'could potentially'.\n"
                 f"3. Never output an intervention as an imperative command or plain noun phrase (e.g. do NOT say 'Earlier inspection of P-204.').\n"
                 f"4. Never assert causal certainty (do NOT use 'would have prevented', 'definitely prevented', 'root cause was').\n"
+                f"5. THRESHOLD ACCURACY: Respect manual vibration zones. 6.7 mm/s is in Zone C (4.5–7.1 mm/s); only > 7.1 mm/s is in Zone D trip. Never state 6.7 mm/s entered Zone D.\n"
+                f"6. EPISTEMIC NEUTRALITY: Do NOT claim interventions 'reduced vibration' or introduce unsupported mechanisms ('suction starvation', 'cavitation', 'abnormal load condition', 'mechanical binding', 'electrical fault') unless explicitly in retrieved evidence. Frame interventions as opportunities to inspect or investigate.\n"
+                f"7. UNKNOWNS GROUNDING: Unknowns must state what is unconfirmed without introducing speculative example causes (no '(e.g., mechanical binding, electrical fault)').\n"
                 f"Regenerate the entire structured JSON response strictly adhering to these requirements.\n"
                 f"</VALIDATOR_CORRECTION_FEEDBACK>"
             )

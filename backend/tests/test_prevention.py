@@ -369,7 +369,7 @@ class TestPreventionPaths(unittest.TestCase):
     def test_unsupported_textbook_theory_is_rejected(self):
         path = {
             "path_id": "PP-003",
-            "title": "Cavitation prevention",
+            "title": "Suction pressure adjustment",
             "hypothetical_intervention": "Could potentially have raised suction pressure because low suction pressure causes cavitation.",
             "potential_effect": "Might have mitigated vibration.",
             "evidence_basis": "EVD-006 recorded suction pressure at 0.8 bar.",
@@ -385,7 +385,7 @@ class TestPreventionPaths(unittest.TestCase):
                 self.allowed_ast_ids,
                 retrieval_result=self.sample_retrieval_result,
             )
-        self.assertIn("causes cavitation", str(ctx.exception).lower())
+        self.assertIn("cavitation", str(ctx.exception).lower())
 
     # 11. Evidence basis may contain observed facts
     def test_evidence_basis_may_contain_observed_facts(self):
@@ -463,7 +463,7 @@ class TestPreventionPaths(unittest.TestCase):
             "path_id": "PP-005",
             "title": "Follow-up on previously recorded shaft alignment offset",
             "hypothetical_intervention": "Performing a scheduled laser alignment check prior to the event may have provided an opportunity to verify shaft runout.",
-            "potential_effect": "Could potentially have reduced mechanical vibration during subsequent operation.",
+            "potential_effect": "May have provided an opportunity to identify or rule out the documented alignment condition as a contributing maintenance concern.",
             "evidence_basis": "EVD-005 documents WO-88492 where angular offset of +0.08mm was recorded and recommended for laser recheck.",
             "evidence_ids": ["EVD-005"],
             "asset_ids": ["M-204", "P-204"],
@@ -505,7 +505,7 @@ class TestPreventionPaths(unittest.TestCase):
             "path_id": "PP-006",
             "title": "Earlier investigation of abnormal suction pressure",
             "hypothetical_intervention": "Earlier dispatch or inspection upon observing abnormal suction pressure may have provided an opportunity to detect restriction.",
-            "potential_effect": "Could potentially have prevented persistent suction starvation.",
+            "potential_effect": "Could potentially have provided an opportunity to investigate the recorded low suction pressure condition before operational escalation.",
             "evidence_basis": "EVD-006 records technician observing 0.8 bar suction pressure versus normal 1.6 bar and baseplate shudder.",
             "evidence_ids": ["EVD-006"],
             "event_ids": ["EVT-004"],
@@ -1038,14 +1038,264 @@ class TestPreventionPaths(unittest.TestCase):
     def test_potential_effect_with_conditional_phrasing_succeeds(self):
         valid_effects = [
             "Might have provided an opportunity to diagnose elevated vibration before reaching the trip threshold.",
-            "Could potentially have reduced mechanical vibration during subsequent operation.",
-            "May have mitigated persistent suction starvation.",
+            "Could potentially have provided an opportunity to investigate mechanical condition.",
+            "May have provided an opportunity to investigate low suction pressure.",
             "Is a plausible path to reduce operational stress.",
         ]
         for eff in valid_effects:
             with self.subTest(eff=eff):
                 # Should not raise
                 self.service.validate_potential_effect(eff, "PP-TEST")
+
+    # 36. Threshold consistency: Rejects 6.7 mm/s labeled as entering Zone D
+    def test_threshold_consistency_rejects_6_7_mms_labeled_as_zone_d(self):
+        invalid_texts = [
+            "Vibration reached 6.7 mm/s entering Zone D trip.",
+            "Operating in Zone D at 6.7 mm/s.",
+            "6.7 mm/s was in Zone D threshold.",
+        ]
+        for txt in invalid_texts:
+            with self.subTest(txt=txt):
+                with self.assertRaises(PreventionValidationError) as ctx:
+                    self.service.validate_threshold_consistency(txt, "hypothetical_intervention", "PP-001")
+                self.assertIn("6.7 mm/s", str(ctx.exception))
+                self.assertIn("zone c", str(ctx.exception).lower())
+
+    # 37. Threshold consistency: Rejects 6.7 mm/s asserted as trip threshold
+    def test_threshold_consistency_rejects_6_7_mms_labeled_as_trip_threshold(self):
+        invalid_texts = [
+            "Vibration reached 6.7 mm/s, surpassing the trip threshold.",
+            "Vibration at 6.7 mm/s reached trip limit.",
+        ]
+        for txt in invalid_texts:
+            with self.subTest(txt=txt):
+                with self.assertRaises(PreventionValidationError) as ctx:
+                    self.service.validate_threshold_consistency(txt, "potential_effect", "PP-001")
+                self.assertIn("6.7 mm/s", str(ctx.exception))
+
+    # 38. Threshold consistency: Accepts 6.7 mm/s correctly identified as Zone C
+    def test_threshold_consistency_accepts_6_7_mms_correctly_identified_as_zone_c(self):
+        valid_texts = [
+            "Vibration rose to 6.7 mm/s, entering Zone C (4.5–7.1 mm/s) before trip.",
+            "At 10:14:15, vibration reached 6.7 mm/s within Zone C warning band.",
+            "Vibration was recorded at 6.7 mm/s, remaining in Zone C prior to escalation.",
+        ]
+        for txt in valid_texts:
+            with self.subTest(txt=txt):
+                # Must not raise
+                self.service.validate_threshold_consistency(txt, "evidence_basis", "PP-001")
+
+    # 39. Threshold consistency: Accepts 8.8 mm/s correctly identified as exceeding Zone D
+    def test_threshold_consistency_accepts_8_8_mms_correctly_identified_as_exceeding_zone_d(self):
+        valid_texts = [
+            "Vibration reached 8.8 mm/s at 10:14:20, exceeding the Zone D trip threshold (>7.1 mm/s RMS).",
+            "Zone D threshold of 7.1 mm/s was exceeded when vibration peaked at 8.8 mm/s.",
+        ]
+        for txt in valid_texts:
+            with self.subTest(txt=txt):
+                # Must not raise
+                self.service.validate_threshold_consistency(txt, "evidence_basis", "PP-001")
+
+    # 40. Unsupported mechanisms: Rejects claiming intervention reduced mechanical vibration without evidence
+    def test_unsupported_mechanism_rejects_reducing_mechanical_vibration_without_evidence(self):
+        path = {
+            "path_id": "PP-002",
+            "title": "Alignment offset correction",
+            "hypothetical_intervention": "Laser alignment follow-up could potentially have reduced mechanical vibration.",
+            "potential_effect": "Might have prevented escalation.",
+            "evidence_basis": "EVD-005 documents WO-88492 with +0.08mm offset.",
+            "evidence_ids": ["EVD-005"],
+            "uncertainties": ["Unconfirmed whether alignment caused trip."],
+            "verification_checks": [{"check": "Review alignment report.", "purpose": "Verify offset."}],
+        }
+        with self.assertRaises(PreventionValidationError) as ctx:
+            self.service.validate_prevention_path(
+                path,
+                self.allowed_ev_ids,
+                self.allowed_evt_ids,
+                self.allowed_ast_ids,
+                retrieval_result=self.sample_retrieval_result,
+            )
+        self.assertIn("reduced mechanical vibration", str(ctx.exception).lower())
+
+    # 41. Unsupported mechanisms: Rejects suction starvation when not in retrieved evidence
+    def test_unsupported_mechanism_rejects_suction_starvation_when_not_in_retrieved_evidence(self):
+        path = {
+            "path_id": "PP-002",
+            "title": "Suction inspection",
+            "hypothetical_intervention": "Earlier inspection may have provided an opportunity to avert suction starvation.",
+            "potential_effect": "Could potentially have maintained normal pressure.",
+            "evidence_basis": "EVD-006 recorded 0.8 bar suction pressure.",
+            "evidence_ids": ["EVD-006"],
+            "uncertainties": ["Unknown root cause."],
+            "verification_checks": [{"check": "Check suction line.", "purpose": "Confirm head."}],
+        }
+        with self.assertRaises(PreventionValidationError) as ctx:
+            self.service.validate_prevention_path(
+                path,
+                self.allowed_ev_ids,
+                self.allowed_evt_ids,
+                self.allowed_ast_ids,
+                retrieval_result=self.sample_retrieval_result,
+            )
+        self.assertIn("suction starvation", str(ctx.exception).lower())
+
+    # 42. Unsupported mechanisms: Rejects speculative cavitation in potential effect
+    def test_unsupported_mechanism_rejects_speculative_cavitation_in_potential_effect(self):
+        path = {
+            "path_id": "PP-002",
+            "title": "Suction pressure monitoring",
+            "hypothetical_intervention": "Reviewing suction telemetry could potentially have provided an opportunity to detect low pressure.",
+            "potential_effect": "Might have prevented pump cavitation during transient load.",
+            "evidence_basis": "EVD-006 recorded 0.8 bar suction pressure.",
+            "evidence_ids": ["EVD-006"],
+            "uncertainties": ["Transient vs continuous low pressure unknown."],
+            "verification_checks": [{"check": "Inspect impeller.", "purpose": "Check for wear."}],
+        }
+        with self.assertRaises(PreventionValidationError) as ctx:
+            self.service.validate_prevention_path(
+                path,
+                self.allowed_ev_ids,
+                self.allowed_evt_ids,
+                self.allowed_ast_ids,
+                retrieval_result=self.sample_retrieval_result,
+            )
+        self.assertIn("cavitation", str(ctx.exception).lower())
+
+    # 43. Unsupported mechanisms: Rejects air ingress or blockage when ungrounded
+    def test_unsupported_mechanism_rejects_air_ingress_or_blockage_when_ungrounded(self):
+        for ungrounded_phrase in ["air ingress", "suction line blockage", "abnormal load condition"]:
+            with self.subTest(phrase=ungrounded_phrase):
+                path = {
+                    "path_id": "PP-002",
+                    "title": "Suction line inspection",
+                    "hypothetical_intervention": f"Earlier inspection could potentially have identified {ungrounded_phrase}.",
+                    "potential_effect": "Might have provided an opportunity to mitigate low pressure.",
+                    "evidence_basis": "EVD-006 recorded 0.8 bar suction pressure.",
+                    "evidence_ids": ["EVD-006"],
+                    "uncertainties": ["Unknown whether condition was continuous."],
+                    "verification_checks": [{"check": "Inspect line.", "purpose": "Verify status."}],
+                }
+                with self.assertRaises(PreventionValidationError) as ctx:
+                    self.service.validate_prevention_path(
+                        path,
+                        self.allowed_ev_ids,
+                        self.allowed_evt_ids,
+                        self.allowed_ast_ids,
+                        retrieval_result=self.sample_retrieval_result,
+                    )
+                self.assertIn(ungrounded_phrase.lower(), str(ctx.exception).lower())
+
+    # 44. Grounded framing: Epistemically neutral opportunity framing succeeds
+    def test_grounded_opportunity_framing_for_alignment_and_suction_succeeds(self):
+        # Alignment path using neutral opportunity wording
+        alignment_path = {
+            "path_id": "PP-001",
+            "title": "Follow-up on previously documented alignment condition",
+            "hypothetical_intervention": "Follow-up on the previously documented alignment offset may have provided an earlier opportunity for inspection.",
+            "potential_effect": "May have provided an opportunity to identify or rule out the documented alignment condition as a contributing maintenance concern.",
+            "evidence_basis": "EVD-005 documents WO-88492 with +0.08mm angular offset recommended for turnaround laser recheck.",
+            "evidence_ids": ["EVD-005"],
+            "asset_ids": ["P-204", "M-204"],
+            "uncertainties": ["No evidence proves the alignment offset caused or contributed to the rising vibration."],
+            "verification_checks": [{"check": "Review CMMS work order WO-88492.", "purpose": "Confirm recheck status."}],
+        }
+        res1 = self.service.validate_prevention_path(
+            alignment_path,
+            self.allowed_ev_ids,
+            self.allowed_evt_ids,
+            self.allowed_ast_ids,
+            retrieval_result=self.sample_retrieval_result,
+        )
+        self.assertEqual(res1.path_id, "PP-001")
+
+        # Suction path using neutral recorded low suction pressure condition
+        suction_path = {
+            "path_id": "PP-002",
+            "title": "Earlier investigation of recorded low suction pressure",
+            "hypothetical_intervention": "Earlier inspection of the suction-side piping may have provided an opportunity to investigate the abnormal suction condition.",
+            "potential_effect": "Could potentially have provided an opportunity to address the recorded low suction pressure condition before operational escalation.",
+            "evidence_basis": "EVD-006 records technician observing 0.8 bar suction pressure compared to 1.6 bar normal.",
+            "evidence_ids": ["EVD-006"],
+            "asset_ids": ["P-204"],
+            "uncertainties": ["Cannot be determined from available evidence whether low suction pressure was transient."],
+            "verification_checks": [{"check": "Examine suction strainer DP.", "purpose": "Assess flow restriction."}],
+        }
+        res2 = self.service.validate_prevention_path(
+            suction_path,
+            self.allowed_ev_ids,
+            self.allowed_evt_ids,
+            self.allowed_ast_ids,
+            retrieval_result=self.sample_retrieval_result,
+        )
+        self.assertEqual(res2.path_id, "PP-002")
+
+    # 45. Unknowns grounding: Rejects speculative parenthetical examples
+    def test_validate_unknown_rejects_speculative_parenthetical_examples(self):
+        speculative_unknowns = [
+            "Whether unconfirmed causes (e.g., mechanical binding, electrical fault) contributed cannot be determined.",
+            "Unknown if other issues (e.g., cavitation, air ingress) occurred.",
+            "Could not determine secondary factors (e.g., suction starvation, blockage).",
+        ]
+        for u in speculative_unknowns:
+            with self.subTest(u=u):
+                with self.assertRaises(PreventionValidationError) as ctx:
+                    self.service.validate_unknown(u, self.sample_retrieval_result)
+                self.assertIn("speculative example causes", str(ctx.exception).lower())
+
+    # 46. Unknowns grounding: Rejects ungrounded engineering mechanisms
+    def test_validate_unknown_rejects_ungrounded_theories(self):
+        ungrounded_unknowns = [
+            "Unknown whether suction starvation developed prior to 10:14:00.",
+            "Cannot confirm whether pump cavitation induced vibration.",
+            "No evidence verifies if air ingress contributed to low suction pressure.",
+        ]
+        for u in ungrounded_unknowns:
+            with self.subTest(u=u):
+                with self.assertRaises(PreventionValidationError) as ctx:
+                    self.service.validate_unknown(u, self.sample_retrieval_result)
+                self.assertIn("ungrounded theory", str(ctx.exception).lower())
+
+    # 47. Unknowns grounding: Accepts grounded factual uncertainty
+    def test_validate_unknown_accepts_grounded_factual_uncertainty(self):
+        valid_unknowns = [
+            "Cannot be confirmed from evidence when suction pressure first dropped below normal 1.6 bar.",
+            "No evidence confirms whether the +0.08 mm alignment offset recorded in EVD-005 directly contributed to the trip.",
+            "Insufficient evidence to determine whether operating staff were notified before vibration exceeded 7.1 mm/s.",
+        ]
+        for u in valid_unknowns:
+            with self.subTest(u=u):
+                # Must not raise
+                self.service.validate_unknown(u, self.sample_retrieval_result)
+
+    # 48. Full raw output validation: Rejects ungrounded summary, threshold errors, and bad unknowns
+    def test_full_raw_output_validation_rejects_threshold_error_in_summary(self):
+        bad_json = {
+            "summary": "At 10:14:15 vibration entered Zone D at 6.7 mm/s, presenting a potential opportunity for earlier review.",
+            "paths": [
+                {
+                    "path_id": "PP-001",
+                    "title": "Earlier response to vibration warning",
+                    "hypothetical_intervention": "Earlier operational review could potentially have provided an opportunity to investigate.",
+                    "potential_effect": "Might have mitigated escalation.",
+                    "evidence_basis": "EVD-003 shows rising vibration.",
+                    "evidence_ids": ["EVD-003"],
+                    "verification_checks": [{"check": "Check alarm timing.", "purpose": "Assess response."}],
+                }
+            ],
+            "unknowns": [
+                "Cannot be determined when vibration first escalated."
+            ],
+        }
+        with self.assertRaises(PreventionValidationError) as ctx:
+            self.service._validate_raw_output(
+                bad_json,
+                self.allowed_ev_ids,
+                self.allowed_evt_ids,
+                self.allowed_ast_ids,
+                retrieval_result=self.sample_retrieval_result,
+            )
+        self.assertIn("6.7 mm/s", str(ctx.exception))
 
 
 if __name__ == "__main__":
