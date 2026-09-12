@@ -371,7 +371,7 @@ export const mockEvidence: Evidence[] = [
     normalizedTimestamp: '2026-09-08T10:14:18Z',
     assetId: 'P-204',
     assetName: 'Pump P-204',
-    extractedEvent: 'Technician J. Miller logged audible cavitation screech and baseplate shaking at 10:14:18, roughly 10 seconds prior to central control room shutdown alarm.',
+    extractedEvent: 'Technician J. Miller logged audible gravel-like rattling and baseplate shudder at 10:14:18, roughly 10 seconds prior to central control room shutdown alarm.',
     confidence: 90,
     originalEvidenceRef: 'Shift Mobile Entry #LOG-20260908-1014, Operator J. Miller (Area 2 Rover)',
     fileSize: '340 KB',

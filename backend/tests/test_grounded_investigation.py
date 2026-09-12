@@ -246,7 +246,7 @@ class TestGroundedInvestigationReasoning(unittest.TestCase):
                 },
                 {
                     "classification": "HYPOTHESIS",
-                    "statement": "Cavitation or mechanical binding may have caused the rapid current rise.",
+                    "statement": "An abnormal flow disturbance may have preceded the rapid current rise.",
                     "basis": "Supported by vibration telemetry in EVD-002 showing sudden escalation.",
                     "evidence_ids": ["EVD-002"],
                     "event_ids": [],
@@ -256,8 +256,8 @@ class TestGroundedInvestigationReasoning(unittest.TestCase):
             "unknowns": ["Upstream suction pressure at the time of vibration onset is unrecorded."],
             "recommended_checks": [
                 {
-                    "check": "Inspect pump P-204 impeller and suction strainer for blockage.",
-                    "reason": "Verify whether flow starvation induced cavitation.",
+                    "check": "Inspect pump P-204 to determine the source of the recorded vibration.",
+                    "reason": "Verify whether flow disturbance was present.",
                     "related_asset_ids": ["P-204"],
                 }
             ],

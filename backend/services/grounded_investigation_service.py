@@ -48,7 +48,7 @@ except ImportError:
 
 
 # Server-side system instruction for RETRACE reasoning model
-RETRACE_SYSTEM_INSTRUCTION = """You are RETRACE, an industrial incident investigation assistant.
+RETRACE_SYSTEM_INSTRUCTION = """You are RETRACE, an evidence-grounded industrial maintenance intelligence and incident investigation assistant.
 
 You reason ONLY from the supplied RETRACE context.
 
@@ -60,39 +60,62 @@ Never invent measurements, timestamps, alarms, equipment states, events, relatio
 
 Every factual conclusion must be grounded in supplied evidence.
 
+CORE GROUNDING RULES:
+1. You may:
+   - state recorded observations
+   - state recorded measurements
+   - describe chronological relationships
+   - describe verified equipment topology
+   - recommend evidence-grounded inspection/review steps
+   - explicitly state what remains unknown
+2. You must NOT introduce:
+   - textbook failure mechanisms (e.g. 'NPSHa deficit', 'cavitation pitting', 'mechanical binding', 'electrical surge', 'torsional vibration')
+   - new component types (e.g. 'Flexible Disc Coupling')
+   - unrecorded instrumentation (e.g. tank levels, differential pressure across strainer, VFD trace buffer, phase currents)
+   - possible root causes
+   - inferred physical mechanisms
+   unless explicitly supported by retrieved evidence.
+
+3. CAUSAL LANGUAGE RESTRICTIONS:
+   - Reject or prevent phrases such as: 'initiated the chain', 'caused the shutdown', 'root cause was', 'cavitation caused', 'torsional vibration caused', 'electrical surge', 'mechanical binding', 'NPSH deficit' unless the supporting retrieved evidence explicitly contains and supports the claim.
+   - Use non-causal chronological relationship terms: 'preceded', 'coincided with', 'was recorded before', 'may warrant inspection', 'exact cause is not established'.
+
+4. ROOT CAUSE QUESTIONS:
+   - If asked 'Was cavitation the root cause?' or similar root-cause questions, do NOT introduce cavitation evidence that does not exist.
+   - Answer conceptually: 'The available evidence does not confirm cavitation as the root cause.'
+   - Then state only the actual recorded evidence:
+     * recorded low suction pressure
+     * rattling / baseplate shudder
+     * rising vibration
+     * VFD warning
+     * shutdown alarm
+   - Do NOT claim these symptoms prove cavitation.
+
+5. INSPECTION GUIDANCE:
+   - Troubleshooting recommendations must be phrased as investigation checks.
+   - GOOD:
+     * 'Inspect P-204 to determine the source of the recorded rattling and baseplate shudder.'
+     * 'Review available VFD-204 warning/fault records associated with W-2310.'
+     * 'Review suction-pressure history and available suction-side inspection records.'
+     * 'Verify whether the documented M-204 alignment recheck was completed.'
+   - BAD:
+     * 'Inspect for cavitation pitting.'
+     * 'Check for mechanical binding.'
+     * 'Inspect blockage causing NPSHa deficit.'
+     * 'Verify torsional vibration from coupling misalignment.'
+
+6. ADVISORY SAFETY:
+   - RETRACE is advisory only and decision-support. Provide advisory investigation support only.
+   - Do not issue industrial control commands.
+   - Do not tell equipment to start, stop, reset, bypass, override.
+   - Never command equipment to start, stop, restart, reset, clear lockout, bypass, override, energize, de-energize, or modify safety/PLC logic.
+   - For questions like 'Should I reset VFD-204 and restart P-204 now?', do not provide direct actuation instructions. State that RETRACE is advisory only and direct the technician to qualified/site-approved procedures (LOTO) and inspection/engineering review.
+
 Distinguish:
-OBSERVED
-CORRELATED
-HYPOTHESIS
-UNKNOWN
-
-CORRELATED findings:
-- Describe temporal sequence, topology, cross-source agreement, or co-occurrence.
-- MUST NOT imply proven causation. Do not use causal phrases such as 'caused', 'causing', 'led to', 'leading to', 'resulted in', 'resulting in', 'responsible for', 'produced', 'triggered the failure', 'therefore caused'.
-- Prefer non-causal relationship language: 'preceded', 'coincided with', 'occurred before', 'was associated with', 'aligned with', 'correlates with'.
-
-HYPOTHESIS findings:
-- Reason only from supplied context.
-- Hypothesis statements MAY name possible mechanisms (such as cavitation, obstruction, internal damage, mechanical resistance, or bearing wear), but ONLY as explicitly uncertain hypotheses (using 'may', 'might', 'could', 'plausibly').
-- 'basis' fields must contain ONLY facts from retrieved evidence (e.g. recorded measurements, timestamps, alarms, and observations).
-- Never introduce external engineering knowledge, textbook principles, or unsourced domain knowledge into basis fields.
-- Do NOT say symptoms are "consistent with" a mechanism or that a condition "could contribute to" a phenomenon in basis fields unless a retrieved manual or engineering document explicitly supports that relationship.
-- If evidence is insufficient to confirm a mechanism, explicitly classify the conclusion UNKNOWN.
-
-RECOMMENDED CHECKS:
-- Advisory human engineering checks to verify hypotheses or resolve unknowns.
-- 'reason' fields must contain ONLY evidence-grounded reasons (e.g. specific recorded sensor values or observations from retrieved evidence).
-- Do NOT justify checks using external engineering theories or ungrounded mechanism assertions (do NOT say symptoms are "consistent with" or "could contribute to" a mechanism in check reasons).
-
-SUMMARY GROUNDING:
-- Frame the summary strictly by recorded symptoms, alarms, and event sequences (e.g. 'The recorded shutdown was a vibration-trip event preceded by VFD overcurrent, increasing vibration, pressure/flow degradation, and technician-observed rattling.').
-- Never claim an exact or unproven root cause unless an official engineering root-cause report in evidence establishes it.
-
-Do not issue industrial control commands.
-
-Do not tell equipment to start, stop, reset, bypass, override, energize, de-energize, or modify safety logic.
-
-Provide advisory investigation support only."""
+OBSERVED: Directly supported by evidence.
+CORRELATED: Temporally or topologically associated across assets, but NOT causal.
+HYPOTHESIS: Plausible explanation requiring additional verification. Must cite evidence and contain explicit uncertainty language.
+UNKNOWN: Gaps that cannot currently be determined from available evidence."""
 
 
 # Prohibited actuation patterns in recommended checks
@@ -164,6 +187,39 @@ FORBIDDEN_CORRELATED_CAUSAL_PATTERNS = [
     ),
 ]
 
+# Prohibited causal assertion patterns across all Copilot and investigation output fields
+FORBIDDEN_CAUSAL_ASSERTION_PATTERNS = [
+    re.compile(r"\binitiated\s+(?:the\s+)?chain\b", re.IGNORECASE),
+    re.compile(r"\bcaused\s+(?:the\s+)?shutdown\b", re.IGNORECASE),
+    re.compile(r"\bcavitation\s+(?:is|was)\s+(?:the\s+)?root\s+cause\b", re.IGNORECASE),
+    re.compile(r"\bcavitation\s+caused\b", re.IGNORECASE),
+    re.compile(r"\btorsional\s+vibration\s+caused\b", re.IGNORECASE),
+    re.compile(r"\b(?:the\s+)?root\s+cause\s+(?:was|is)\b", re.IGNORECASE),
+    re.compile(r"\bproven\s+root\s+cause\b", re.IGNORECASE),
+    re.compile(r"\bdefinitive\s+root\s+cause\b", re.IGNORECASE),
+    re.compile(r"\bconclusively\s+(?:identified|determined|established)\s+as\s+the\s+(?:root\s+)?cause\b", re.IGNORECASE),
+]
+
+# Domain mechanism patterns that must NOT appear unless present in retrieved evidence context
+UNSUPPORTED_COPILOT_MECHANISM_PATTERNS = [
+    ("npsha deficit", re.compile(r"\b(?:npsha?|npsh)\s+deficit\b", re.IGNORECASE)),
+    ("npsh", re.compile(r"\bnpsha?\b", re.IGNORECASE)),
+    ("low suction head", re.compile(r"\b(?:low\s+)?suction\s+head\b", re.IGNORECASE)),
+    ("partial blockage debris restriction", re.compile(r"\bpartial\s+blockage,\s*debris,\s*or\s*restriction\b", re.IGNORECASE)),
+    ("torsional vibration", re.compile(r"\btorsional\s+vibration\b", re.IGNORECASE)),
+    ("cavitation pitting", re.compile(r"\bcavitation\s+pitting\b", re.IGNORECASE)),
+    ("mechanical binding", re.compile(r"\bmechanical\s+binding\b", re.IGNORECASE)),
+    ("electrical surge", re.compile(r"\belectrical\s+surge\b", re.IGNORECASE)),
+    ("mechanical cavitation", re.compile(r"\bmechanical\s+cavitation\b", re.IGNORECASE)),
+    ("coupling misalignment", re.compile(r"\bcoupling\s+misalignment\b", re.IGNORECASE)),
+    ("cavitation", re.compile(r"\bcavitation\b", re.IGNORECASE)),
+]
+
+# Invented component patterns
+INVENTED_COMPONENT_PATTERNS = [
+    ("Flexible Disc Coupling", re.compile(r"\bflexible\s+disc\s+coupling\b", re.IGNORECASE)),
+]
+
 # Patterns introducing unsourced textbook or external domain theories into HYPOTHESIS basis or check reason.
 # Hypotheses and checks must reason strictly from facts present in retrieved RETRACE evidence.
 UNSOURCED_DOMAIN_THEORY_PATTERNS = [
@@ -230,6 +286,12 @@ class GroundedInvestigationError(Exception):
 
 class InvestigationValidationError(GroundedInvestigationError):
     """Raised when request, LLM schema, or input constraints fail."""
+    def __init__(self, message: str, status_code: int = 422):
+        super().__init__(message, status_code=status_code)
+
+
+class InvestigationWordingValidationError(InvestigationValidationError):
+    """Raised specifically when counterfactual phrasing, ungrounded domain theory, or causal assertions fail."""
     def __init__(self, message: str, status_code: int = 422):
         super().__init__(message, status_code=status_code)
 
@@ -480,12 +542,138 @@ REASONING INSTRUCTIONS:
 
         return allowed_evidence_ids, allowed_chunk_ids, allowed_event_ids, allowed_asset_ids
 
+    def extract_retrieved_text_corpus(self, retrieval_result: Optional[Dict[str, Any]]) -> str:
+        """Extract a consolidated lowercased text corpus of all retrieved evidence, events, and assets."""
+        if not retrieval_result:
+            return ""
+        corpus_parts: List[str] = []
+        for ev in retrieval_result.get("evidence", []):
+            corpus_parts.append(ev.get("text") or "")
+            corpus_parts.append(ev.get("extracted_content") or "")
+            corpus_parts.append(ev.get("filename") or "")
+            corpus_parts.append(ev.get("original_reference") or "")
+            prov = ev.get("provenance") or {}
+            for v in prov.values():
+                if isinstance(v, str):
+                    corpus_parts.append(v)
+        for evt in retrieval_result.get("events", []):
+            corpus_parts.append(evt.get("description") or "")
+            corpus_parts.append(evt.get("details") or "")
+        for ast in retrieval_result.get("assets", []):
+            corpus_parts.append(ast.get("name") or "")
+            corpus_parts.append(ast.get("type") or "")
+            corpus_parts.append(ast.get("description") or "")
+        return " ".join(corpus_parts).lower()
+
+    def validate_causal_assertions(self, text: str, field_name: str = "Response") -> None:
+        """Reject unproven causal assertions such as 'initiated the chain', 'caused the shutdown', 'root cause was', etc."""
+        if not text:
+            return
+        for pattern in FORBIDDEN_CAUSAL_ASSERTION_PATTERNS:
+            m = pattern.search(text)
+            if m:
+                raise InvestigationWordingValidationError(
+                    f"{field_name} contains prohibited causal assertion ('{m.group(0)}'). "
+                    "Non-causal correlation or temporal sequence language must be used instead."
+                )
+
+    def validate_unsupported_domain_mechanisms(
+        self,
+        text: str,
+        retrieved_corpus: str = "",
+        field_name: str = "Response",
+    ) -> None:
+        """Ensure engineering theories and physical mechanisms are not introduced unless present in retrieved evidence."""
+        if not text:
+            return
+        lower_text = text.lower()
+        for mech_name, pattern in UNSUPPORTED_COPILOT_MECHANISM_PATTERNS:
+            if pattern.search(lower_text):
+                # If mechanism is present in retrieved evidence corpus, it is grounded
+                if retrieved_corpus and pattern.search(retrieved_corpus):
+                    continue
+
+                # Special allowance: conceptual statements explicitly stating evidence does NOT confirm or prove the mechanism
+                if mech_name == "cavitation":
+                    negation_patterns = [
+                        r"\b(?:does\s+not|doesn't|cannot|can't|unable\s+to|fails?\s+to)\s+(?:confirm|prove|establish|determine|show)\s+(?:that\s+)?cavitation\b",
+                        r"\b(?:not|un)\s*confirmed\s+(?:whether\s+)?cavitation\b",
+                        r"\bevidence\s+does\s+not\s+(?:confirm|prove|establish)\s+cavitation\b",
+                        r"\binsufficient\s+evidence\s+to\s+(?:determine|confirm|prove)\s+(?:whether\s+)?cavitation\b",
+                        r"\bwithout\s+confirming\s+cavitation\b",
+                        r"\bdoes\s+not\s+establish\s+cavitation\b",
+                    ]
+                    if any(re.search(p, lower_text) for p in negation_patterns):
+                        # Ensure it doesn't also assert cavitation causally or descriptively
+                        if not re.search(r"\bcavitation\s+(?:caused|initiated|produced|led\s+to|resulted\s+in|pitting|disturbance|screech)\b", lower_text):
+                            continue
+
+                raise InvestigationWordingValidationError(
+                    f"{field_name} introduces unsupported failure mechanism or engineering theory ('{mech_name}'). "
+                    "Mechanisms must not be introduced unless explicitly supported by retrieved evidence."
+                )
+
+    def validate_component_grounding(
+        self,
+        text: str,
+        retrieved_corpus: str = "",
+        field_name: str = "Response",
+    ) -> None:
+        """Ensure invented component types (e.g. Flexible Disc Coupling) are not introduced unless present in retrieved evidence."""
+        if not text:
+            return
+        lower_text = text.lower()
+        for comp_name, pattern in INVENTED_COMPONENT_PATTERNS:
+            if pattern.search(lower_text):
+                if not retrieved_corpus or not pattern.search(retrieved_corpus):
+                    raise InvestigationWordingValidationError(
+                        f"{field_name} introduces ungrounded component type ('{comp_name}') not supported by retrieved evidence."
+                    )
+
+    def validate_actuation_safety(self, text: str, field_name: str = "Response") -> None:
+        """Ensure no autonomous control or equipment actuation commands are output."""
+        if not text:
+            return
+        for pattern in FORBIDDEN_ACTUATION_PATTERNS:
+            for m in pattern.finditer(text):
+                start = m.start()
+                # Find the beginning of the sentence or clause
+                clause_start = max(
+                    text.rfind(".", 0, start),
+                    text.rfind(";", 0, start),
+                    text.rfind("\n", 0, start),
+                    0,
+                )
+                clause_preceding = text[clause_start:start].lower()
+                if re.search(r"\b(?:do\s+not|don't|never|cannot|can't|prohibit(?:ed)?|forbidden|without|prior\s+to|before)\b", clause_preceding):
+                    continue
+                raise InvestigationSafetyError(
+                    f"{field_name} contains prohibited equipment actuation command: '{m.group(0)}'. "
+                    "RETRACE is advisory only and forbidden from executing or prescribing autonomous machinery control."
+                )
+
+    def validate_copilot_text(
+        self,
+        text: str,
+        retrieval_result: Optional[Dict[str, Any]] = None,
+        field_name: str = "Response",
+    ) -> None:
+        """Deterministic post-generation validator for technician troubleshooting/copilot responses (Fail Closed)."""
+        if not text or not text.strip():
+            raise InvestigationValidationError(f"{field_name} must not be empty.")
+        corpus = self.extract_retrieved_text_corpus(retrieval_result)
+        self.validate_actuation_safety(text, field_name=field_name)
+        self.validate_causal_assertions(text, field_name=field_name)
+        self.validate_unsupported_domain_mechanisms(text, retrieved_corpus=corpus, field_name=field_name)
+        self.validate_component_grounding(text, retrieved_corpus=corpus, field_name=field_name)
+
     def validate_finding(
         self,
         finding: Any,
         allowed_evidence_ids: Set[str],
         allowed_event_ids: Set[str],
         allowed_asset_ids: Set[str],
+        retrieved_corpus: str = "",
     ) -> InvestigationFinding:
         """Deterministically validate single finding for citation validity, classification rules, and non-causality."""
         # 1. Validate classification enum
@@ -537,6 +725,15 @@ REASONING INSTRUCTIONS:
 
         # 3. Server-side classification rules
         combined_text = (statement + " " + basis).lower()
+
+        # Check causal assertions and ungrounded mechanisms
+        self.validate_causal_assertions(statement, field_name="Finding statement")
+        self.validate_causal_assertions(basis, field_name="Finding basis")
+        if retrieved_corpus:
+            self.validate_unsupported_domain_mechanisms(statement, retrieved_corpus=retrieved_corpus, field_name="Finding statement")
+            self.validate_unsupported_domain_mechanisms(basis, retrieved_corpus=retrieved_corpus, field_name="Finding basis")
+            self.validate_component_grounding(statement, retrieved_corpus=retrieved_corpus, field_name="Finding statement")
+            self.validate_component_grounding(basis, retrieved_corpus=retrieved_corpus, field_name="Finding basis")
 
         if classification == FindingClassification.OBSERVED:
             # Must cite at least one evidence_id or event_id
@@ -604,6 +801,7 @@ REASONING INSTRUCTIONS:
         self,
         check: Any,
         allowed_asset_ids: Set[str],
+        retrieved_corpus: str = "",
     ) -> RecommendedCheck:
         """Validate that recommended checks are advisory inspections and do not issue actuation commands."""
         if isinstance(check, dict):
@@ -622,12 +820,10 @@ REASONING INSTRUCTIONS:
 
         # Safety Enforcement: Prohibit autonomous equipment actuation or override commands
         full_text = f"{check_text} {reason_text}"
-        for pattern in FORBIDDEN_ACTUATION_PATTERNS:
-            if pattern.search(full_text):
-                raise InvestigationSafetyError(
-                    f"Recommended check contains prohibited equipment actuation command: '{check_text}'. "
-                    "RETRACE is advisory only and forbidden from executing or prescribing autonomous machinery control."
-                )
+        self.validate_actuation_safety(full_text, field_name="Recommended check")
+
+        # Non-causal validation
+        self.validate_causal_assertions(full_text, field_name="Recommended check")
 
         # Grounding check: Ensure recommended-check reason contains only evidence-grounded facts, not external textbook theories
         for unsourced_pat in UNSOURCED_DOMAIN_THEORY_PATTERNS:
@@ -637,6 +833,10 @@ REASONING INSTRUCTIONS:
                     f"Recommended check reason introduces unsourced domain or textbook theory ('{m.group(0)}'). "
                     "Recommended check reasons must contain only factual, evidence-grounded observations and measurements."
                 )
+
+        if retrieved_corpus:
+            self.validate_unsupported_domain_mechanisms(full_text, retrieved_corpus=retrieved_corpus, field_name="Recommended check")
+            self.validate_component_grounding(full_text, retrieved_corpus=retrieved_corpus, field_name="Recommended check")
 
         # Asset citation validation in checks
         ast_ids: List[str] = []
@@ -659,11 +859,20 @@ REASONING INSTRUCTIONS:
         self,
         summary: str,
         retrieval_result: Optional[Dict[str, Any]] = None,
+        retrieved_corpus: str = "",
     ) -> str:
         """Validate that summary wording does not claim an unsupported root cause unless confirmed in evidence."""
         if not summary or not summary.strip():
             return "Investigation assessment complete."
         summary_clean = summary.strip()
+
+        # Check for prohibited causal assertions
+        self.validate_causal_assertions(summary_clean, field_name="Summary")
+
+        if retrieved_corpus:
+            self.validate_unsupported_domain_mechanisms(summary_clean, retrieved_corpus=retrieved_corpus, field_name="Summary")
+            self.validate_component_grounding(summary_clean, retrieved_corpus=retrieved_corpus, field_name="Summary")
+
         for pattern in FORBIDDEN_SUMMARY_ROOT_CAUSE_PATTERNS:
             match = pattern.search(summary_clean)
             if match:
@@ -682,58 +891,12 @@ REASONING INSTRUCTIONS:
                     )
         return summary_clean
 
-    def investigate(
-        self,
-        incident_id: str,
-        request: InvestigationRequest,
-    ) -> InvestigationResponse:
-        """Execute complete evidence-grounded investigation pipeline:
-
-        1. Retrieve grounded context package via existing HybridRetrievalService
-        2. Delimit untrusted data in prompt
-        3. Invoke Gemini reasoning model with structured JSON response schema
-        4. Validate citation grounding against retrieved IDs (Fail-Closed)
-        5. Validate finding classifications and safety checks
-        6. Assemble structured InvestigationResponse with source provenance
-        """
-        start_time = time.time()
-
-        # 1. Incident existence check
-        incident = incident_service.get_incident_by_id(incident_id)
-        if not incident:
-            raise GroundedInvestigationError(f"Incident '{incident_id}' not found.", status_code=404)
-
-        query = request.query.strip()
-
-        # 2. Hybrid Retrieval Execution (Reuse existing pipeline)
-        # Production failure behavior: do NOT fabricate or mock context on hybrid failure
-        try:
-            retrieval_result = self.hybrid_retrieval_service.search_hybrid(
-                incident_id=incident_id,
-                query=query,
-                top_k=request.top_k,
-                asset_id=request.asset_id,
-                source_type=request.source_type,
-            )
-        except HybridRetrievalError as e:
-            logger.error("[RETRACE] Hybrid retrieval error during investigation for incident %s: %s", incident_id, e.message)
-            raise GroundedInvestigationError(f"Hybrid retrieval failed: {e.message}", status_code=e.status_code)
-        except Exception as e:
-            logger.error("[RETRACE] Unexpected retrieval error: %s", type(e).__name__)
-            raise GroundedInvestigationError("Failed to retrieve grounded context for investigation.", status_code=500)
-
-        # 3. Extract allowed citation identifiers from retrieved context
-        allowed_ev_ids, allowed_chunk_ids, allowed_evt_ids, allowed_ast_ids = self._extract_allowed_identifiers(retrieval_result)
-
-        # 4. Construct prompt with strict data separation
-        prompt = self.build_prompt_with_data_separation(query, retrieval_result)
-
-        # 5. Call Gemini via Vertex AI (ADC, no API key)
+    def _invoke_model_and_parse(self, prompt: str) -> RawGeminiInvestigationOutput:
+        """Invoke Gemini reasoning model and parse structured JSON into RawGeminiInvestigationOutput."""
         client = self._get_client()
         raw_response_text = ""
 
         try:
-            # Define response schema using google-genai structured output types
             config = None
             if genai_types is not None and hasattr(genai_types, "GenerateContentConfig"):
                 config = genai_types.GenerateContentConfig(
@@ -759,13 +922,11 @@ REASONING INSTRUCTIONS:
                 self.location,
                 type(e).__name__,
             )
-            # Controlled 503 error on reasoning model failure. Do NOT fall back to mock reasoning in production!
             raise InvestigationServiceError(
                 f"Vertex AI reasoning model unavailable: {sanitize_log_message(e)}",
                 status_code=503,
             )
 
-        # 6. Parse structured output JSON
         if not raw_response_text or not raw_response_text.strip():
             raise InvestigationValidationError("Reasoning model returned an empty response.", status_code=422)
 
@@ -785,7 +946,7 @@ REASONING INSTRUCTIONS:
             raise InvestigationValidationError("Reasoning model produced malformed JSON.", status_code=422)
 
         try:
-            raw_output = RawGeminiInvestigationOutput(**parsed_data)
+            return RawGeminiInvestigationOutput(**parsed_data)
         except Exception as e:
             logger.error("[RETRACE] Model output did not match expected schema: %s", type(e).__name__)
             raise InvestigationValidationError(
@@ -793,7 +954,20 @@ REASONING INSTRUCTIONS:
                 status_code=422,
             )
 
-        # 7. Server-Side Validation: Validate findings, citation grounding, and non-causality
+    def _validate_raw_output(
+        self,
+        raw_output: RawGeminiInvestigationOutput,
+        allowed_ev_ids: Set[str],
+        allowed_evt_ids: Set[str],
+        allowed_ast_ids: Set[str],
+        retrieval_result: Dict[str, Any],
+        retrieved_corpus: str,
+    ) -> Tuple[str, List[InvestigationFinding], List[str], List[RecommendedCheck]]:
+        """Validate entire raw Gemini output deterministically.
+        Raises InvestigationWordingValidationError on causal or unsupported mechanism failures (eligible for single-shot retry).
+        Raises InvestigationCitationError, InvestigationSafetyError, or InvestigationValidationError for unrecoverable errors.
+        """
+        # Validate findings
         validated_findings: List[InvestigationFinding] = []
         for raw_finding in raw_output.findings:
             vf = self.validate_finding(
@@ -801,19 +975,133 @@ REASONING INSTRUCTIONS:
                 allowed_evidence_ids=allowed_ev_ids,
                 allowed_event_ids=allowed_evt_ids,
                 allowed_asset_ids=allowed_ast_ids,
+                retrieved_corpus=retrieved_corpus,
             )
             validated_findings.append(vf)
 
-        # 8. Server-Side Validation: Validate recommended checks against actuation safety rules
+        # Validate recommended checks
         validated_checks: List[RecommendedCheck] = []
         for raw_check in raw_output.recommended_checks:
             vc = self.validate_recommended_check(
                 raw_check,
                 allowed_asset_ids=allowed_ast_ids,
+                retrieved_corpus=retrieved_corpus,
             )
             validated_checks.append(vc)
 
-        # 9. Format sources_used strictly from retrieved evidence
+        # Validate summary
+        summary_clean = self.validate_summary(
+            raw_output.summary,
+            retrieval_result=retrieval_result,
+            retrieved_corpus=retrieved_corpus,
+        )
+
+        # Clean unknowns
+        unknowns_clean = [str(u).strip() for u in (raw_output.unknowns or []) if str(u).strip()]
+        for u in unknowns_clean:
+            self.validate_causal_assertions(u, field_name="Unknown")
+            if retrieved_corpus:
+                self.validate_unsupported_domain_mechanisms(u, retrieved_corpus=retrieved_corpus, field_name="Unknown")
+                self.validate_component_grounding(u, retrieved_corpus=retrieved_corpus, field_name="Unknown")
+
+        return summary_clean, validated_findings, unknowns_clean, validated_checks
+
+    def investigate(
+        self,
+        incident_id: str,
+        request: InvestigationRequest,
+    ) -> InvestigationResponse:
+        """Execute complete evidence-grounded investigation pipeline:
+
+        1. Retrieve grounded context package via existing HybridRetrievalService
+        2. Delimit untrusted data in prompt
+        3. Invoke Gemini reasoning model with structured JSON response schema
+        4. Validate citation grounding against retrieved IDs (Fail-Closed)
+        5. Validate finding classifications and safety checks
+        6. Optional single regeneration if output fails only wording validation
+        7. Assemble structured InvestigationResponse with source provenance
+        """
+        start_time = time.time()
+
+        # 1. Incident existence check
+        incident = incident_service.get_incident_by_id(incident_id)
+        if not incident:
+            raise GroundedInvestigationError(f"Incident '{incident_id}' not found.", status_code=404)
+
+        query = request.query.strip()
+
+        # 2. Hybrid Retrieval Execution (Reuse existing pipeline)
+        try:
+            retrieval_result = self.hybrid_retrieval_service.search_hybrid(
+                incident_id=incident_id,
+                query=query,
+                top_k=request.top_k,
+                asset_id=request.asset_id,
+                source_type=request.source_type,
+            )
+        except HybridRetrievalError as e:
+            logger.error("[RETRACE] Hybrid retrieval error during investigation for incident %s: %s", incident_id, e.message)
+            raise GroundedInvestigationError(f"Hybrid retrieval failed: {e.message}", status_code=e.status_code)
+        except Exception as e:
+            logger.error("[RETRACE] Unexpected retrieval error: %s", type(e).__name__)
+            raise GroundedInvestigationError("Failed to retrieve grounded context for investigation.", status_code=500)
+
+        # 3. Extract allowed citation identifiers and retrieved text corpus
+        allowed_ev_ids, allowed_chunk_ids, allowed_evt_ids, allowed_ast_ids = self._extract_allowed_identifiers(retrieval_result)
+        retrieved_corpus = self.extract_retrieved_text_corpus(retrieval_result)
+
+        # 4. Construct prompt with strict data separation
+        prompt = self.build_prompt_with_data_separation(query, retrieval_result)
+
+        # 5. First generation attempt
+        raw_output = self._invoke_model_and_parse(prompt)
+
+        # 6. Server-Side Validation with single-shot constrained regeneration on wording failure
+        try:
+            summary_clean, validated_findings, unknowns_clean, validated_checks = self._validate_raw_output(
+                raw_output=raw_output,
+                allowed_ev_ids=allowed_ev_ids,
+                allowed_evt_ids=allowed_evt_ids,
+                allowed_ast_ids=allowed_ast_ids,
+                retrieval_result=retrieval_result,
+                retrieved_corpus=retrieved_corpus,
+            )
+        except InvestigationWordingValidationError as wording_err:
+            logger.warning(
+                "[RETRACE] Investigation wording validation failed (%s). Triggering one regeneration attempt with concise feedback.",
+                wording_err.message,
+            )
+            feedback_prompt = (
+                f"{prompt}\n\n"
+                f"<VALIDATOR_CORRECTION_FEEDBACK>\n"
+                f"Your previous output failed RETRACE grounding and causal wording validation:\n"
+                f"{wording_err.message}\n\n"
+                f"CRITICAL GROUNDING RULES:\n"
+                f"1. State ONLY recorded observations, measurements, and temporal relationships.\n"
+                f"2. Never introduce textbook failure mechanisms (e.g. 'NPSHa deficit', 'cavitation pitting', 'mechanical binding', 'electrical surge', 'torsional vibration') unless explicitly in retrieved evidence.\n"
+                f"3. Never introduce new component types (e.g. 'Flexible Disc Coupling') unless in retrieved evidence.\n"
+                f"4. Never assert causation (do NOT use 'initiated the chain', 'caused the shutdown', 'root cause was', 'cavitation caused', 'torsional vibration caused').\n"
+                f"5. If asked about cavitation, state conceptually that evidence does not confirm cavitation as the root cause, and list only actual recorded evidence (recorded low suction pressure, rattling/baseplate shudder, rising vibration, VFD warning, shutdown alarm).\n"
+                f"6. Recommended checks must be advisory investigation steps only (e.g. 'Inspect P-204 to determine the source of the recorded rattling and baseplate shudder.').\n"
+                f"Regenerate the entire structured JSON response strictly adhering to these requirements.\n"
+                f"</VALIDATOR_CORRECTION_FEEDBACK>"
+            )
+
+            # Exactly one regeneration attempt
+            retry_raw_output = self._invoke_model_and_parse(feedback_prompt)
+
+            # Re-run all validators (fail closed if invalid)
+            summary_clean, validated_findings, unknowns_clean, validated_checks = self._validate_raw_output(
+                raw_output=retry_raw_output,
+                allowed_ev_ids=allowed_ev_ids,
+                allowed_evt_ids=allowed_evt_ids,
+                allowed_ast_ids=allowed_ast_ids,
+                retrieval_result=retrieval_result,
+                retrieved_corpus=retrieved_corpus,
+            )
+            logger.info("[RETRACE] Investigation regeneration succeeded.")
+
+        # 7. Format sources_used strictly from retrieved evidence
         sources_used: List[EvidenceCitation] = []
         for ev in retrieval_result.get("evidence", []):
             prov = ev.get("provenance") or {}
@@ -837,10 +1125,7 @@ REASONING INSTRUCTIONS:
                 )
             )
 
-        # 10. Assemble complete response
-        summary_clean = self.validate_summary(raw_output.summary, retrieval_result)
-        unknowns_clean = [str(u).strip() for u in (raw_output.unknowns or []) if str(u).strip()]
-
+        # 8. Assemble complete response
         response = InvestigationResponse(
             incident_id=incident_id,
             query=query,
@@ -852,7 +1137,6 @@ REASONING INSTRUCTIONS:
         )
 
         latency_ms = (time.time() - start_time) * 1000.0
-        # Safe logging: only high-level metadata, no raw evidence bodies or technician notes
         logger.info(
             "[RETRACE] Grounded investigation completed: incident_id=%s, model=%s, location=%s, evidence_count=%d, findings_count=%d, checks_count=%d, latency_ms=%.1f, status=SUCCESS",
             incident_id,

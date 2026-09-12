@@ -202,15 +202,33 @@ export const investigationService = {
       'What information is still missing?',
     ];
 
-    if (qLower.includes('before the shutdown') || qLower.includes('happened before')) {
-      category = 'OBSERVED';
-      supportingIds = ['EVD-001', 'EVD-003'];
+    if (qLower.includes('was cavitation') || qLower.includes('is cavitation') || (qLower.includes('cavitation') && (qLower.includes('root cause') || qLower.includes('cause')))) {
+      category = 'CORRELATED';
+      supportingIds = ['EVD-001', 'EVD-002', 'EVD-003', 'EVD-006'];
       replyContent =
-        'Sequence reconstructed from drive logs and historian:\n\n' +
+        'The available evidence does not confirm cavitation as the root cause. ' +
+        'The available evidence records: recorded low suction pressure (0.8 bar), ' +
+        'audible gravel-like rattling and baseplate shudder at 10:14:18, rising vibration ' +
+        'entering Zone C (6.7 mm/s) and Zone D (8.8 mm/s), VFD-204 overcurrent warning ' +
+        'W-2310 at 10:14:01, and PLC-204 shutdown alarm at 10:14:28. The available evidence ' +
+        'does not prove cavitation or establish an unverified mechanical root cause.';
+    } else if (qLower.includes('reset') || qLower.includes('restart') || qLower.includes('start pump')) {
+      category = 'CORRELATED';
+      supportingIds = ['EVD-001', 'EVD-002'];
+      replyContent =
+        'RETRACE is advisory only and cannot provide direct machinery restart or fault reset instructions. ' +
+        'Do not reset VFD-204 or restart Pump P-204 without following site-approved Lock-Out/Tag-Out (LOTO) ' +
+        'procedures, completing required mechanical and electrical inspections, and obtaining authorization ' +
+        'from qualified engineering personnel.';
+    } else if (qLower.includes('before the shutdown') || qLower.includes('happened before')) {
+      category = 'OBSERVED';
+      supportingIds = ['EVD-001', 'EVD-003', 'EVD-006'];
+      replyContent =
+        'Sequence reconstructed from drive logs, historian, and technician records:\n\n' +
         '1. 10:14:01 — VFD-204 recorded an overcurrent warning (268.4A peak) at the inverter output stage.\n' +
         '2. 10:14:05 — Motor M-204 experienced an 8.2% phase current imbalance.\n' +
         '3. 10:14:12 — Pump P-204 discharge pressure dropped precipitously from 6.8 bar to 4.2 bar.\n' +
-        '4. 10:14:18 — Operator J. Miller logged audible cavitation screech and baseplate vibration.\n\n' +
+        '4. 10:14:18 — Operator J. Miller logged audible gravel-like rattling and baseplate shudder.\n\n' +
         'All early warning milestones occurred within a 27-second window before the trip alarm.';
     } else if (qLower.includes('which assets') || qLower.includes('assets were involved')) {
       category = 'CORRELATED';
@@ -221,14 +239,15 @@ export const investigationService = {
         '• Motor M-204 (110kW Induction Motor): drives Pump P-204.\n' +
         '• Pump P-204 (Centrifugal Booster Pump): monitored by PLC-204.\n' +
         '• PLC-204 (Safety & Process Controller): executed the hard trip interlock.';
-    } else if (qLower.includes('inspect next') || qLower.includes('what should the technician inspect')) {
+    } else if (qLower.includes('inspect next') || qLower.includes('what should the technician inspect') || qLower.includes('technician inspect')) {
       category = 'HYPOTHESIS';
       supportingIds = ['EVD-004', 'EVD-005', 'EVD-006'];
       replyContent =
         'Recommended Human Engineering & Physical Inspection Steps:\n\n' +
-        '1. Suction Strainer ST-204: Inspect for partial blockage, debris, or restriction causing low suction head (NPSHa deficit).\n' +
-        '2. Flexible Disc Coupling: Verify whether the +0.08mm angular offset reported in WO-88492 exacerbated torsional vibration under load.\n' +
-        '3. Pump Impeller & Casing: Inspect for cavitation pitting or mechanical binding.\n\n' +
+        '1. Inspect P-204 to determine the source of the recorded rattling and baseplate shudder.\n' +
+        '2. Review available VFD-204 warning/fault records associated with W-2310.\n' +
+        '3. Review suction-pressure history and available suction-side inspection records.\n' +
+        '4. Verify whether the documented M-204 alignment recheck was completed.\n\n' +
         '⚠️ Safety Notice: RETRACE is advisory only. Ensure Lock-Out / Tag-Out (LOTO) protocols are executed prior to physical intervention.';
     } else if (qLower.includes('missing') || qLower.includes('information is still missing')) {
       category = 'UNKNOWN';
@@ -246,13 +265,14 @@ export const investigationService = {
         '• VFD_204_Log.csv: Hardware-stamped overcurrent warning W-2310 (Row 4209).\n' +
         '• SCADA_Alarm_Log.csv: Alarm Seq #88310 vibration trip interlock execution.\n' +
         '• Historian_P204.csv: Synchronized 1-second process head/flow/motor kW trace.\n' +
-        '• Technician_Observation_001: Independent human operator confirmation of audible screech and baseplate shaking at 10:14:18.';
+        '• Technician_Observation_001: Independent human operator confirmation of audible gravel-like rattling and baseplate shudder at 10:14:18.';
     } else {
       category = 'CORRELATED';
       supportingIds = ['EVD-001', 'EVD-003', 'EVD-002'];
       replyContent =
-        `Based on the ingested operational telemetry, VFD-204 registered an overcurrent pulse at 10:14:01, followed sequentially by Motor M-204 phase divergence, Pump P-204 cavitation disturbance, and PLC-204 trip at 10:14:28.\n\n` +
-        `This chain is correlated by physical asset topology and synchronized timestamps, but physical teardown is required to confirm whether the root trigger was mechanical blockage or electrical transient.`;
+        `Based on ingested evidence for ${incidentId}, VFD-204 registered an overcurrent warning at 10:14:01, ` +
+        `which was recorded before Motor M-204 current deviation, Pump P-204 pressure drop, and PLC-204 trip at 10:14:28. ` +
+        `The chronological sequence across assets is established, but the exact root cause is not established by the available evidence.`;
     }
 
     const matchedEvidence = mockEvidence
