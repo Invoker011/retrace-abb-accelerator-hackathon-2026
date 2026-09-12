@@ -48,6 +48,7 @@ from backend.services.prevention_service import (
     PreventionSafetyError,
     PreventionServiceError,
     PreventionValidationError,
+    PreventionWordingValidationError,
     get_prevention_paths_service,
 )
 
@@ -814,6 +815,237 @@ class TestPreventionPaths(unittest.TestCase):
             json={"query": "test query"},
         )
         self.assertEqual(resp.status_code, 404)
+
+    # 28. Wording validation triggers single regeneration and succeeds
+    def test_wording_validation_triggers_single_regeneration_and_succeeds(self):
+        mock_client = MagicMock()
+
+        # First attempt: invalid wording ("Earlier inspection of P-204.")
+        first_resp = MagicMock()
+        first_resp.text = json.dumps({
+            "summary": "Plausible opportunities identified.",
+            "paths": [
+                {
+                    "path_id": "PP-001",
+                    "title": "Earlier inspection",
+                    "hypothetical_intervention": "Earlier inspection of P-204.",
+                    "potential_effect": "Might have provided an opportunity to identify abnormal vibration.",
+                    "evidence_basis": "EVD-001 logs overcurrent warning.",
+                    "evidence_ids": ["EVD-001"],
+                    "uncertainties": ["Causality not proven."],
+                    "verification_checks": [{"check": "Review logs.", "purpose": "Check current."}],
+                }
+            ],
+            "unknowns": ["Root cause unconfirmed."],
+        })
+
+        # Second attempt: corrected conditional wording
+        second_resp = MagicMock()
+        second_resp.text = json.dumps({
+            "summary": "Plausible opportunities identified.",
+            "paths": [
+                {
+                    "path_id": "PP-001",
+                    "title": "Earlier inspection",
+                    "hypothetical_intervention": "Earlier inspection of P-204 could potentially have provided an opportunity to identify abnormal vibration.",
+                    "potential_effect": "Might have provided an opportunity to identify abnormal vibration.",
+                    "evidence_basis": "EVD-001 logs overcurrent warning.",
+                    "evidence_ids": ["EVD-001"],
+                    "uncertainties": ["Causality not proven."],
+                    "verification_checks": [{"check": "Review logs.", "purpose": "Check current."}],
+                }
+            ],
+            "unknowns": ["Root cause unconfirmed."],
+        })
+
+        mock_client.models.generate_content.side_effect = [first_resp, second_resp]
+
+        svc = PreventionPathsService(
+            hybrid_retrieval_service=self.mock_hybrid_retrieval_service,
+            client=mock_client,
+        )
+
+        resp = svc.get_prevention_paths("INC-2026-001")
+        self.assertEqual(mock_client.models.generate_content.call_count, 2)
+        # Check that feedback prompt was passed in the second call
+        second_call_contents = mock_client.models.generate_content.call_args_list[1].kwargs["contents"]
+        self.assertIn("<VALIDATOR_CORRECTION_FEEDBACK>", second_call_contents)
+        self.assertIn("could potentially", second_call_contents)
+        self.assertEqual(len(resp.paths), 1)
+        self.assertIn("could potentially have provided an opportunity", resp.paths[0].hypothetical_intervention)
+
+    # 29. Wording validation fails closed if second attempt also fails
+    def test_wording_validation_fails_closed_if_second_attempt_also_fails(self):
+        mock_client = MagicMock()
+
+        # First attempt: invalid wording
+        first_resp = MagicMock()
+        first_resp.text = json.dumps({
+            "summary": "Plausible opportunities identified.",
+            "paths": [
+                {
+                    "path_id": "PP-001",
+                    "title": "Earlier inspection",
+                    "hypothetical_intervention": "Earlier inspection of P-204.",
+                    "potential_effect": "Might have provided an opportunity to identify abnormal vibration.",
+                    "evidence_basis": "EVD-001 logs overcurrent warning.",
+                    "evidence_ids": ["EVD-001"],
+                    "uncertainties": ["Causality not proven."],
+                    "verification_checks": [{"check": "Review logs.", "purpose": "Check current."}],
+                }
+            ],
+            "unknowns": ["Root cause unconfirmed."],
+        })
+
+        # Second attempt: still invalid wording ("Inspecting the pump earlier prevents escalation.")
+        second_resp = MagicMock()
+        second_resp.text = json.dumps({
+            "summary": "Plausible opportunities identified.",
+            "paths": [
+                {
+                    "path_id": "PP-001",
+                    "title": "Earlier inspection",
+                    "hypothetical_intervention": "Inspecting the pump earlier prevents escalation.",
+                    "potential_effect": "Might have provided an opportunity to identify abnormal vibration.",
+                    "evidence_basis": "EVD-001 logs overcurrent warning.",
+                    "evidence_ids": ["EVD-001"],
+                    "uncertainties": ["Causality not proven."],
+                    "verification_checks": [{"check": "Review logs.", "purpose": "Check current."}],
+                }
+            ],
+            "unknowns": ["Root cause unconfirmed."],
+        })
+
+        mock_client.models.generate_content.side_effect = [first_resp, second_resp]
+
+        svc = PreventionPathsService(
+            hybrid_retrieval_service=self.mock_hybrid_retrieval_service,
+            client=mock_client,
+        )
+
+        with self.assertRaises(PreventionWordingValidationError) as ctx:
+            svc.get_prevention_paths("INC-2026-001")
+        self.assertEqual(mock_client.models.generate_content.call_count, 2)
+        self.assertEqual(ctx.exception.status_code, 422)
+
+    # 30. Citation error does NOT trigger regeneration (fails closed immediately)
+    def test_citation_error_fails_immediately_without_regeneration(self):
+        mock_client = MagicMock()
+        resp = MagicMock()
+        resp.text = json.dumps({
+            "summary": "Plausible opportunities identified.",
+            "paths": [
+                {
+                    "path_id": "PP-001",
+                    "title": "Earlier inspection",
+                    "hypothetical_intervention": "Could potentially have checked earlier.",
+                    "potential_effect": "Might have provided an opportunity.",
+                    "evidence_basis": "EVD-FABRICATED claims inspection.",
+                    "evidence_ids": ["EVD-FABRICATED"],
+                    "uncertainties": ["Causality not proven."],
+                    "verification_checks": [{"check": "Review logs.", "purpose": "Check current."}],
+                }
+            ],
+            "unknowns": ["Root cause unconfirmed."],
+        })
+        mock_client.models.generate_content.return_value = resp
+
+        svc = PreventionPathsService(
+            hybrid_retrieval_service=self.mock_hybrid_retrieval_service,
+            client=mock_client,
+        )
+
+        with self.assertRaises(PreventionCitationError) as ctx:
+            svc.get_prevention_paths("INC-2026-001")
+        # Ensure only 1 call was made (no retry for ungrounded citations)
+        self.assertEqual(mock_client.models.generate_content.call_count, 1)
+
+    # 31. Safety actuation error does NOT trigger regeneration (fails closed immediately)
+    def test_safety_error_fails_immediately_without_regeneration(self):
+        mock_client = MagicMock()
+        resp = MagicMock()
+        resp.text = json.dumps({
+            "summary": "Plausible opportunities identified.",
+            "paths": [
+                {
+                    "path_id": "PP-001",
+                    "title": "Actuation",
+                    "hypothetical_intervention": "Technician could potentially restart pump P-204 immediately.",
+                    "potential_effect": "Might have restored flow.",
+                    "evidence_basis": "EVD-001 logs overcurrent warning.",
+                    "evidence_ids": ["EVD-001"],
+                    "uncertainties": ["Causality not proven."],
+                    "verification_checks": [{"check": "Review logs.", "purpose": "Check current."}],
+                }
+            ],
+            "unknowns": ["Root cause unconfirmed."],
+        })
+        mock_client.models.generate_content.return_value = resp
+
+        svc = PreventionPathsService(
+            hybrid_retrieval_service=self.mock_hybrid_retrieval_service,
+            client=mock_client,
+        )
+
+        with self.assertRaises(PreventionSafetyError) as ctx:
+            svc.get_prevention_paths("INC-2026-001")
+        # Ensure only 1 call was made (no retry for safety violations)
+        self.assertEqual(mock_client.models.generate_content.call_count, 1)
+
+    # 32. Standalone vague terms without required conditional markers fail
+    def test_standalone_vague_terms_fail_hypothetical_validation(self):
+        vague_phrases = [
+            "Earlier inspection of P-204.",
+            "We could inspect the pump.",
+            "A possible inspection of suction piping.",
+            "Consider checking the alignment.",
+            "Recommended to review historian data.",
+            "Maintenance should have corrected the alignment.",
+            "Inspecting the pump earlier prevents escalation.",
+        ]
+        for phrase in vague_phrases:
+            with self.subTest(phrase=phrase):
+                with self.assertRaises(PreventionWordingValidationError):
+                    self.service.validate_hypothetical_intervention(phrase, "PP-TEST")
+
+    # 33. All required conditional markers succeed in hypothetical_intervention
+    def test_required_conditional_markers_succeed_in_hypothetical_intervention(self):
+        valid_phrases = [
+            "Earlier investigation of the rising vibration could potentially have provided an opportunity to identify the developing abnormal condition.",
+            "Follow-up on the previously documented alignment offset may have provided an earlier opportunity for inspection.",
+            "Earlier inspection of the suction-side piping may have provided an opportunity to identify abnormal restriction.",
+            "Review of vibration telemetry might have alerted operators before the threshold was reached.",
+            "This represents a plausible prevention path for plant engineers to investigate.",
+        ]
+        for phrase in valid_phrases:
+            with self.subTest(phrase=phrase):
+                # Should not raise
+                self.service.validate_hypothetical_intervention(phrase, "PP-TEST")
+
+    # 34. Potential effect without conditional phrasing fails
+    def test_potential_effect_without_conditional_phrasing_fails(self):
+        invalid_effects = [
+            "Averts the trip and restores normal operation.",
+            "Stops the motor from tripping.",
+            "Directly resolves the vibration issue.",
+        ]
+        for eff in invalid_effects:
+            with self.subTest(eff=eff):
+                with self.assertRaises(PreventionWordingValidationError):
+                    self.service.validate_potential_effect(eff, "PP-TEST")
+
+    # 35. Potential effect with valid conditional phrasing succeeds
+    def test_potential_effect_with_conditional_phrasing_succeeds(self):
+        valid_effects = [
+            "Might have provided an opportunity to diagnose elevated vibration before reaching the trip threshold.",
+            "Could potentially have reduced mechanical vibration during subsequent operation.",
+            "May have mitigated persistent suction starvation.",
+            "Is a plausible path to reduce operational stress.",
+        ]
+        for eff in valid_effects:
+            with self.subTest(eff=eff):
+                # Should not raise
+                self.service.validate_potential_effect(eff, "PP-TEST")
 
 
 if __name__ == "__main__":

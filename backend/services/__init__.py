@@ -4,6 +4,11 @@ from backend.services.evidence_service import evidence_service
 from backend.services.investigation_service import investigation_service
 from backend.services.prevention_service import (
     PreventionPathsService,
+    PreventionPathsError,
+    PreventionValidationError,
+    PreventionWordingValidationError,
+    PreventionCitationError,
+    PreventionSafetyError,
     get_prevention_paths_service,
 )
 
@@ -12,5 +17,10 @@ __all__ = [
     "evidence_service",
     "investigation_service",
     "PreventionPathsService",
+    "PreventionPathsError",
+    "PreventionValidationError",
+    "PreventionWordingValidationError",
+    "PreventionCitationError",
+    "PreventionSafetyError",
     "get_prevention_paths_service",
 ]
