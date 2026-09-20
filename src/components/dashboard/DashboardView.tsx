@@ -53,13 +53,19 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       {/* Top Banner / System State */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b border-slate-800/80">
         <div>
-          <div className="flex items-center gap-2">
-            <span className="text-xs font-mono uppercase tracking-widest text-cyan-400">
-              Multimodal Maintenance Intelligence
+          <div className="flex items-center gap-3">
+            <div className="font-mono text-xl font-bold tracking-wider text-white uppercase inline-flex items-baseline">
+              <span>RETR</span>
+              <span className="text-[#FF1A1A] font-extrabold">A</span>
+              <span>CE</span>
+            </div>
+            <span className="text-slate-600">|</span>
+            <span className="text-xs font-mono uppercase tracking-wider text-slate-300 font-medium">
+              Industrial Incident Forensics
             </span>
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping" />
           </div>
-          <h1 className="text-2xl font-bold font-mono tracking-tight text-white mt-1">
+          <h1 className="text-2xl font-bold font-mono tracking-tight text-white mt-2">
             Industrial Incident Intelligence Dashboard
           </h1>
           <p className="text-sm text-slate-400 font-sans mt-0.5">

@@ -86,21 +86,23 @@ export const Sidebar: React.FC<SidebarProps> = ({
       {/* Top Branding Section */}
       <div>
         <div className="p-5 border-b border-slate-800/80 bg-[#0a101d]/60">
-          <div className="flex items-center gap-2.5 mb-1.5">
-            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-cyan-500 to-blue-600 flex items-center justify-center text-black font-black text-lg tracking-tighter shadow-lg shadow-cyan-500/20">
-              R
-            </div>
-            <div>
-              <div className="flex items-center gap-1.5">
-                <span className="font-mono text-lg font-bold tracking-wider text-white">RETRACE</span>
-                <span className="text-[10px] px-1.5 py-0.5 rounded bg-cyan-950 border border-cyan-800 text-cyan-400 font-mono">
-                  v0.1
-                </span>
+          <div className="mb-1">
+            <div className="flex items-center justify-between">
+              <div className="font-mono text-xl font-bold tracking-wider text-white uppercase inline-flex items-baseline">
+                <span>RETR</span>
+                <span className="text-[#FF1A1A] font-extrabold">A</span>
+                <span>CE</span>
               </div>
-              <p className="text-[11px] font-mono tracking-wide text-cyan-400/90 font-medium">
-                Reconstruct. Replay. Learn.
-              </p>
+              <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-900 border border-slate-800 text-slate-400 font-mono">
+                v0.1
+              </span>
             </div>
+            <p className="text-[11px] font-mono tracking-wide text-slate-300 font-medium uppercase mt-0.5">
+              Industrial Incident Forensics
+            </p>
+            <p className="text-[11px] font-mono tracking-wide text-cyan-400/90 font-medium mt-0.5">
+              Reconstruct. Replay. Learn.
+            </p>
           </div>
           <div className="mt-3 flex items-center gap-2 text-[11px] font-mono text-slate-400 bg-slate-900/80 px-2.5 py-1 rounded border border-slate-800">
             <Radio className="w-3 h-3 text-emerald-400 animate-pulse" />
