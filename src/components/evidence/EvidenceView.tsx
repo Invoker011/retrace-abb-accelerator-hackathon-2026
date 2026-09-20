@@ -51,16 +51,8 @@ export const EvidenceView: React.FC<EvidenceViewProps> = ({
     setUploadedItems((prev) => [newItem, ...prev.filter((i) => i.evidenceId !== newItem.evidenceId)]);
   };
 
-  const handleDeleteUploadedItem = async (evidenceId: string) => {
-    if (window.confirm(`Are you sure you want to remove uploaded evidence ${evidenceId}?`)) {
-      try {
-        await evidenceService.deleteUploadedEvidence(evidenceId);
-        setUploadedItems((prev) => prev.filter((i) => i.evidenceId !== evidenceId));
-      } catch (err) {
-        console.error('Failed to delete uploaded evidence:', err);
-      }
-    }
-  };
+  // In public demo mode, evidence deletion is disabled/non-interactive to preserve audit records
+  // and prevent mutation of the uploaded incident evidence.
 
   // Convert uploaded items to Evidence representation for uniform display
   const convertedUploadedItems: Evidence[] = uploadedItems.map((item) => {
@@ -322,9 +314,9 @@ export const EvidenceView: React.FC<EvidenceViewProps> = ({
                   {activeUploadedRecord && (
                     <button
                       id="delete-uploaded-evidence-btn"
-                      onClick={() => handleDeleteUploadedItem(activeUploadedRecord.evidenceId)}
-                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-rose-950/40 hover:bg-rose-900/60 border border-rose-800/80 text-rose-300 font-mono text-xs transition-colors"
-                      title="Delete this uploaded evidence artifact"
+                      disabled={true}
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-rose-950/20 border border-rose-900/40 text-rose-400/50 font-mono text-xs cursor-not-allowed opacity-60"
+                      title="Disabled in public demo"
                     >
                       <Trash2 className="w-3.5 h-3.5" />
                       <span>Delete</span>
